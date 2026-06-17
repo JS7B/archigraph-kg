@@ -40,3 +40,4 @@ runs/
 .idea/
 .DS_Store
 Thumbs.db
+.superpowers/

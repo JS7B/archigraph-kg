@@ -40,20 +40,20 @@
 
 ### 后端基础与配置
 
-- [ ] 初始化 FastAPI 应用结构。
-- [ ] 实现配置加载。
-- [ ] 实现日志。
-- [ ] 实现统一错误响应。
-- [ ] 实现健康检查接口。
-- [ ] 实现 OpenAI-compatible chat 客户端。
-- [ ] 实现 OpenAI-compatible embedding 客户端。
-- [ ] 实现 Neo4j 连接管理。
+- [x] 初始化 FastAPI 应用结构。
+- [x] 实现配置加载。
+- [x] 实现日志。
+- [x] 实现统一错误响应。
+- [x] 实现健康检查接口。
+- [x] 实现 OpenAI-compatible chat 客户端。（薄封装就位，真实调用待业务阶段验证）
+- [x] 实现 OpenAI-compatible embedding 客户端。（同上）
+- [x] 实现 Neo4j 连接管理。
 
 验证：
 
-- [ ] 健康检查通过。
-- [ ] 能成功调用 chat 和 embedding。
-- [ ] 能连接 Neo4j 并执行基础 Cypher。
+- [x] 健康检查通过。（/health 与 /health/deps，pytest 2 passed）
+- [~] 能成功调用 chat 和 embedding。（客户端就位；占位 key 下未做真实调用，待配置真实 LLM 后验证）
+- [x] 能连接 Neo4j 并执行基础 Cypher。（/health/deps 返回 neo4j:ok，RETURN 1 通）
 
 ### 文档解析与切块
 
@@ -211,3 +211,5 @@
 - 2026-06-16：根据用户反馈，规划文档移除对其他项目文档的引用，弱化字段清单为概念模型；确认公开 GitHub、git worktree、样本文档领域、清晰专业前端、Neo4j Docker、本地 PDF 解析和 GraphRAG 接入策略。
 - 2026-06-16：根据用户反馈，规划从“版本/时间切分”调整为“完整落地范围 + 标准工程化开发路径”，避免后续实现时反复争论临时范围边界。
 - 2026-06-17：敲定 4 项待确认决策（PDF=PyMuPDF、可视化=Cytoscape.js、LLM=占位符不绑厂商、仓库名=graphrag-kg-agent）。完成项目基础设施：迁入新仓库并 git init + 推送 GitHub（公开）、配置 `.gitignore`、创建 backend/frontend/samples/evals 目录骨架、编写 `.env.example`、`docker-compose.yml`（Neo4j 5.26）、README 草稿。本机未装 Docker，Neo4j 端到端验证待装 Docker 后进行。
+- 2026-06-17：装好 WSL2 + Docker Desktop，docker compose 拉起 Neo4j 5.26 并用 cypher-shell 实测连通，README 的「一键起 Neo4j」端到端可复现。
+- 2026-06-17：完成后端 FastAPI 骨架（首次试用「总指挥 + 后台 worktree 执行代理」工作流）：config/clients/routers 分层、pydantic-settings 读 .env、lifespan 管理 Neo4j 驱动、统一错误响应、/health 与 /health/deps 双探针。pytest 2 passed，/health/deps 返回 neo4j:ok。主窗口 review 通过后合并，清理 worktree 时发现并停掉了代理残留的 uvicorn 进程（经验：子代理启动的后台进程需主动回收）。
