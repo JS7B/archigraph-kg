@@ -1,0 +1,11 @@
+# 后端依赖。开发使用 conda `myself` 环境（Python 3.12），以下依赖均已在该环境装好。
+# 此清单用于记录与在其他环境复现，不要在 myself 环境重复 pip install。
+
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+openai
+neo4j
+pytest
+httpx
