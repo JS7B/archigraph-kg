@@ -18,25 +18,25 @@
 - [x] 明确可以接入 GraphRAG 并做项目级微调。
 - [x] 产出项目规划文档。
 - [x] 将规划从版本/时间切分调整为完整落地范围和工程化开发路径。
-- [ ] 确认前端图谱可视化库。
-- [ ] 确认 PDF 解析库。
-- [ ] 确认公开仓库名称和项目英文名。
-- [ ] 确认 OpenAI-compatible 服务商和默认模型名。
+- [x] 确认前端图谱可视化库。（Cytoscape.js）
+- [x] 确认 PDF 解析库。（PyMuPDF）
+- [x] 确认公开仓库名称和项目英文名。（graphrag-kg-agent）
+- [x] 确认 OpenAI-compatible 服务商和默认模型名。（先用占位符，不绑定厂商）
 
 ### 项目基础设施
 
-- [ ] 初始化 Git 仓库结构。
-- [ ] 创建 backend / frontend / docs / samples / evals 目录。
-- [ ] 配置 `.gitignore`。
-- [ ] 配置 `.env.example`。
-- [ ] 编写 README 草稿。
-- [ ] 编写 Docker Compose，包含 Neo4j。
-- [ ] 定义本地启动命令。
+- [x] 初始化 Git 仓库结构。
+- [x] 创建 backend / frontend / docs / samples / evals 目录。
+- [x] 配置 `.gitignore`。
+- [x] 配置 `.env.example`。
+- [x] 编写 README 草稿。
+- [x] 编写 Docker Compose，包含 Neo4j。
+- [ ] 定义本地启动命令。（Neo4j 已就绪；前后端启动命令待对应模块实现后补充）
 
 验证：
 
-- [ ] 新开发者按 README 可以启动 Neo4j、后端和前端。
-- [ ] 密钥、缓存、运行数据不会被提交。
+- [ ] 新开发者按 README 可以启动 Neo4j、后端和前端。（待装 Docker 后端到端验证）
+- [x] 密钥、缓存、运行数据不会被提交。（.gitignore 已覆盖，git status 已确认）
 
 ### 后端基础与配置
 
@@ -210,3 +210,4 @@
 - 2026-06-16：将项目定位为个人知识图谱 GraphRAG Agent。确认 OpenAI-compatible 调用和 Neo4j 图谱存储，形成初始实现路线。
 - 2026-06-16：根据用户反馈，规划文档移除对其他项目文档的引用，弱化字段清单为概念模型；确认公开 GitHub、git worktree、样本文档领域、清晰专业前端、Neo4j Docker、本地 PDF 解析和 GraphRAG 接入策略。
 - 2026-06-16：根据用户反馈，规划从“版本/时间切分”调整为“完整落地范围 + 标准工程化开发路径”，避免后续实现时反复争论临时范围边界。
+- 2026-06-17：敲定 4 项待确认决策（PDF=PyMuPDF、可视化=Cytoscape.js、LLM=占位符不绑厂商、仓库名=graphrag-kg-agent）。完成项目基础设施：迁入新仓库并 git init + 推送 GitHub（公开）、配置 `.gitignore`、创建 backend/frontend/samples/evals 目录骨架、编写 `.env.example`、`docker-compose.yml`（Neo4j 5.26）、README 草稿。本机未装 Docker，Neo4j 端到端验证待装 Docker 后进行。
