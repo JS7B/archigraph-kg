@@ -1,0 +1,22 @@
+.dataValue {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.label {
+  color: var(--color-text-subtle);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.value {
+  border-radius: var(--radius-xs);
+  padding: var(--space-0) var(--space-1);
+  color: var(--color-text-body);
+  background: var(--color-surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+}
