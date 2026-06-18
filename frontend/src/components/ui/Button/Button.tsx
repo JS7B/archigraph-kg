@@ -1,29 +1,27 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import styles from './Button.module.css'
 
-export interface ButtonProps {
+export interface ButtonProps
+  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'> {
   variant?: 'primary' | 'secondary' | 'ghost'
   size?: 'sm' | 'md'
-  disabled?: boolean
-  type?: ButtonHTMLAttributes<HTMLButtonElement>['type']
-  onClick?: ButtonHTMLAttributes<HTMLButtonElement>['onClick']
   children: ReactNode
+  className?: string
 }
 
 export function Button({
   variant = 'secondary',
   size = 'md',
   type = 'button',
-  disabled = false,
-  onClick,
+  className = '',
   children,
+  ...rest
 }: ButtonProps) {
   return (
     <button
-      className={`${styles.button} ${styles[variant]} ${styles[size]}`}
-      disabled={disabled}
+      className={`${styles.button} ${styles[variant]} ${styles[size]} ${className}`}
       type={type}
-      onClick={onClick}
+      {...rest}
     >
       {children}
     </button>
