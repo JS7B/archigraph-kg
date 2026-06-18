@@ -1,36 +1,124 @@
 :root {
-  /* 颜色 */
-  --color-bg: #f7f8fa;
-  --color-surface: #ffffff;
-  --color-border: #e5e7eb;
-  --color-accent: #6366f1;
-  --color-accent-soft: #eef0ff;
-  --color-accent-border: #c7d2fe;
-  --color-text: #1f2937;
-  --color-text-muted: #6b7280;
-  --color-success: #16a34a;
-  --color-error: #dc2626;
-  --color-warning: #d97706;
+  /* ───────────────────────────────────────────────────────────
+     颜色 · 冷调 slate 中性 + 靛紫强调
+     中性走冷 slate（偏蓝灰），契合知识图谱/技术工具气质，
+     与 Notion/Linear 的暖灰拉开距离。
+     ─────────────────────────────────────────────────────────── */
 
-  /* 间距 */
+  /* 表面层级（由低到高：页面底 → 卡片面 → 下沉槽） */
+  --color-bg: #f8fafc;          /* 页面背景 */
+  --color-surface: #ffffff;     /* 卡片 / 面板表面 */
+  --color-surface-sunken: #f1f5f9; /* 下沉区（输入框底、代码块底） */
+
+  /* 边框两档：发丝级分隔 + 实体描边 */
+  --color-border: #e2e8f0;      /* 发丝分隔线 */
+  --color-border-strong: #cbd5e1; /* 实体描边 / 悬浮态 */
+
+  /* 文字四档（精致度的关键：从强到弱的层次） */
+  --color-text: #0f172a;        /* 标题 / 强调 */
+  --color-text-body: #334155;   /* 正文 */
+  --color-text-muted: #64748b;  /* 次要 / 说明 */
+  --color-text-subtle: #94a3b8; /* 占位 / 禁用 / 弱标注 */
+
+  /* 强调色 · 靛紫，给足交互层次 */
+  --color-accent: #6366f1;
+  --color-accent-hover: #4f46e5;
+  --color-accent-active: #4338ca;
+  --color-accent-soft: #eef2ff; /* 选中底 / 高亮底 */
+  --color-accent-softer: #e0e7ff; /* hover 在 soft 之上再深一档 */
+  --color-accent-border: #c7d2fe;
+  --color-on-accent: #ffffff;   /* 强调色之上的文字 */
+
+  /* 语义状态色：每色配一个 soft 底，用于状态徽标 */
+  --color-success: #15803d;
+  --color-success-soft: #dcfce7;
+  --color-warning: #b45309;
+  --color-warning-soft: #fef3c7;
+  --color-error: #b91c1c;
+  --color-error-soft: #fee2e2;
+  --color-info: #0369a1;
+  --color-info-soft: #e0f2fe;
+
+  /* 焦点环（无障碍：可见键盘焦点） */
+  --color-focus-ring: rgba(99, 102, 241, 0.45);
+
+  /* ───────────────────────────────────────────────────────────
+     间距 · 4px 基准尺度（补足两端）
+     ─────────────────────────────────────────────────────────── */
+  --space-0: 2px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
 
-  /* 圆角 */
+  /* ───────────────────────────────────────────────────────────
+     圆角 · 多档
+     ─────────────────────────────────────────────────────────── */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
   --radius: 8px;
-  --radius-sm: 4px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
 
-  /* 字体 */
+  /* ───────────────────────────────────────────────────────────
+     字体
+     系统字体栈（项目求简单稳定，不引网络字体）。
+     等宽字体是本系统的签名：承载"可溯源数据"——
+     chunk ID、文档位置、计数、时间戳，呼应引用可追溯护城河。
+     ─────────────────────────────────────────────────────────── */
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-mono: "SF Mono", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace;
+  --font-mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace;
 
-  /* 字号 */
-  --text-sm: 13px;
-  --text-base: 14px;
-  --text-lg: 16px;
-  --text-xl: 20px;
+  /* 字阶（完整层级，1.2~1.25 比例，避免局促） */
+  --text-xs: 12px;   /* 角标 / 微标注 */
+  --text-sm: 13px;   /* 说明 / 次要 */
+  --text-base: 14px; /* 正文基准 */
+  --text-md: 15px;   /* 强调正文 */
+  --text-lg: 17px;   /* 小标题 */
+  --text-xl: 20px;   /* 区块标题 */
+  --text-2xl: 25px;  /* 视图主标题 */
+  --text-3xl: 32px;  /* 展示性大字（罕用） */
+
+  /* 行高三档 */
+  --leading-tight: 1.25;  /* 标题 */
+  --leading-snug: 1.45;   /* 紧凑正文 */
+  --leading-relaxed: 1.65;/* 阅读型长文（chunk 原文） */
+
+  /* 字重四档 */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* 字距（eyebrow 大写标签用加宽字距） */
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
+  --tracking-wider: 0.08em;
+
+  /* ───────────────────────────────────────────────────────────
+     阴影 · 双层柔和 slate（非生硬纯黑，浅色精致的关键）
+     ─────────────────────────────────────────────────────────── */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 2px 4px rgba(15, 23, 42, 0.05), 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 4px 8px rgba(15, 23, 42, 0.06), 0 12px 28px rgba(15, 23, 42, 0.10);
+
+  /* ───────────────────────────────────────────────────────────
+     动效 · 缓动 + 时长（克制，服务交互反馈）
+     ─────────────────────────────────────────────────────────── */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+
+  /* 层级 */
+  --z-panel: 10;
+  --z-overlay: 100;
+  --z-toast: 1000;
 }

@@ -1,4 +1,6 @@
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -11,16 +13,68 @@ html, body, #root {
 body {
   font-family: var(--font-sans);
   font-size: var(--text-base);
-  color: var(--color-text);
+  line-height: var(--leading-snug);
+  color: var(--color-text-body);
   background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 标题默认走强文字色与紧凑行高 */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-text);
+  line-height: var(--leading-tight);
+  font-weight: var(--weight-semibold);
 }
 
 button {
   font-family: inherit;
+  font-size: inherit;
   cursor: pointer;
 }
 
-code, pre {
+button:disabled {
+  cursor: not-allowed;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+code, pre, kbd, samp {
   font-family: var(--font-mono);
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+/* 无障碍：仅键盘聚焦时显示焦点环，鼠标点击不显示 */
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* 文本选区配色 */
+::selection {
+  background: var(--color-accent-softer);
+  color: var(--color-text);
+}
+
+/* 尊重用户的减弱动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
