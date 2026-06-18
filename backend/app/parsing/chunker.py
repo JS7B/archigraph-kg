@@ -19,6 +19,65 @@ logger = logging.getLogger(__name__)
 MAX_CHARS = 800
 OVERLAP_CHARS = 150
 
+_BREAKPOINTS = ("。", ".", "\n", " ")
+
+
+def _find_breakpoint(text: str, window_end: int, window_start: int) -> int:
+    """Return the best cut point in [window_start, window_end).
+
+    Searches for the last natural breakpoint within the window and returns
+    the position right after it (so the breakpoint char is included in the
+    current chunk).  Returns window_end when no breakpoint is found (hard cut).
+    """
+    for bp in _BREAKPOINTS:
+        idx = text.rfind(bp, window_start, window_end)
+        if idx != -1:
+            return idx + 1
+    return window_end
+
+
+def split_oversized_block(
+    block: Block,
+    max_chars: int = MAX_CHARS,
+    overlap_chars: int = OVERLAP_CHARS,
+) -> list[Block]:
+    """Split an oversized Block into sub-blocks via sliding window.
+
+    Each window is at most *max_chars* wide; consecutive windows overlap by
+    *overlap_chars*.  The cut point prefers a natural breakpoint (句号, period,
+    newline, space) and falls back to a hard cut at max_chars.
+
+    Sub-block char_start/end are recalculated relative to the parent block's
+    char_start so offsets remain traceable to the original raw_text.
+    """
+    text = block.text
+    if len(text) <= max_chars:
+        return [block]
+
+    subs: list[Block] = []
+    pos = 0
+    n = len(text)
+    while pos < n:
+        window_end = min(pos + max_chars, n)
+        if window_end < n:
+            cut = _find_breakpoint(text, window_end, pos + 1)
+        else:
+            cut = window_end
+        sub_text = text[pos:cut]
+        subs.append(
+            Block(
+                text=sub_text,
+                char_start=block.char_start + pos,
+                char_end=block.char_start + cut,
+                page=block.page,
+                heading_path=block.heading_path,
+            )
+        )
+        if cut >= n:
+            break
+        pos = max(cut - overlap_chars, pos + 1)
+    return subs
+
 
 def _make_chunk(index: int, group: list[Block], document_id: str, raw_text: str) -> Chunk:
     start = group[0].char_start
@@ -52,6 +111,12 @@ def chunk_blocks(
     """
     if not blocks:
         return []
+
+    # Step 1: pre-split oversized blocks
+    expanded: list[Block] = []
+    for block in blocks:
+        expanded.extend(split_oversized_block(block, max_chars, overlap_chars))
+    blocks = expanded
 
     groups: list[list[Block]] = []
     current: list[Block] = [blocks[0]]

@@ -1,6 +1,6 @@
 """chunker 测试：聚合、同页同标题守卫、小块回填、偏移可追溯。"""
 
-from app.parsing.chunker import chunk_blocks, MAX_CHARS
+from app.parsing.chunker import chunk_blocks, MAX_CHARS, split_oversized_block
 from app.parsing.models import Block
 
 
@@ -75,3 +75,48 @@ def test_small_trailing_block_cross_boundary_stays_separate():
 
 def test_empty_blocks_returns_empty():
     assert chunk_blocks([], document_id="d", raw_text="") == []
+
+
+def test_split_oversized_block_produces_multiple_subblocks():
+    text = "x" * 2000
+    block = Block(text=text, char_start=0, char_end=2000)
+    subs = split_oversized_block(block, max_chars=800, overlap_chars=150)
+    assert len(subs) >= 3
+    # sub-block offsets must round-trip to parent text
+    for s in subs:
+        assert text[s.char_start:s.char_end] == s.text
+
+
+def test_split_oversized_block_overlaps():
+    text = "x" * 2000
+    block = Block(text=text, char_start=0, char_end=2000)
+    subs = split_oversized_block(block, max_chars=800, overlap_chars=150)
+    # second block starts before first block ends (overlap exists)
+    assert subs[1].char_start < subs[0].char_end
+
+
+def test_split_prefers_natural_breakpoint():
+    # period at position 600, window of 800 should cut right after it
+    text = "A" * 600 + "." + "B" * 800
+    block = Block(text=text, char_start=0, char_end=len(text))
+    subs = split_oversized_block(block, max_chars=800, overlap_chars=150)
+    # first sub-block should end with period
+    assert subs[0].text.endswith(".")
+
+
+def test_chunk_blocks_splits_oversized_then_aggregates():
+    raw = "x" * 2000
+    block = Block(text=raw, char_start=0, char_end=2000)
+    chunks = chunk_blocks([block], document_id="d", raw_text=raw)
+    assert len(chunks) >= 3
+    for c in chunks:
+        assert raw[c.location.char_start:c.location.char_end] == c.text
+
+
+def test_block_not_oversized_returns_single():
+    text = "short"
+    block = Block(text=text, char_start=10, char_end=15)
+    subs = split_oversized_block(block, max_chars=800)
+    assert len(subs) == 1
+    assert subs[0].char_start == 10
+    assert subs[0].char_end == 15
