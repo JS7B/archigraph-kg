@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     chat_model: str = ""
     embedding_model: str = ""
+    embedding_dim: int = 3072
 
     # Neo4j
     neo4j_uri: str = ""

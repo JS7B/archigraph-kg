@@ -46,3 +46,27 @@
 - 踩了什么坑：
   - **本机有两个 Python**：系统默认 `python` 是 3.14（没装项目依赖，连 pytest 都没有），项目依赖全在 conda `myself` 环境（3.12）。跑测试必须显式 `conda run -n myself python -m pytest`，否则报 `No module named pytest`。这是「环境隔离」的典型表现——别假设 `python` 指向你想要的那个。
   - **PyMuPDF 包名与导入名不一致**：pip 装的是 `PyMuPDF`，代码里却 `import fitz`。这是历史遗留命名，记住「装 PyMuPDF、导 fitz」即可。
+
+## 2026-06-18 Neo4j 图谱写入与向量检索
+
+- 做了什么：新增 `app/graph/` 写入与检索层——建图谱约束与向量索引（`schema.py`）、把文档与 chunk 落库并写入 embedding（`writer.py`/`embedding.py`）、按问题向量召回 top-k 相关 chunk（`search.py`）。10 个集成测试连真实 Neo4j 全通，真实 embedding（text-embedding-3-large，3072 维）端到端召回验证成功。
+
+- 这是什么：
+  - **embedding（向量嵌入）**：把一段文本压成一串定长数字（这里 3072 个），语义相近的文本，向量也相近。它和「切分」无关——切分早已用纯规则做完；embedding 是为了「检索」：提问时把问题也转成向量，找数学上最接近的 chunk。
+  - **向量索引（Vector Index）**：Neo4j 5.13+ 自带的能力，把所有 chunk 的向量建成一个可快速搜索的结构（HNSW 图），让「找最相似的 k 个」从逐个比对变成近似最近邻查询，量大时快得多。无需 APOC/GDS 插件。
+  - **余弦相似度（cosine）**：衡量两个向量「方向」是否一致的指标，1 最像、0 不相关。文本检索常用它而非欧氏距离，因为只关心语义方向、不关心向量长度。
+  - **MERGE（幂等写入）**：Cypher 的「有则匹配、无则创建」。我们给每个 chunk 造确定性的 `chunk_id = 文档id#序号`，重复入库同一文档时 MERGE 命中老节点、不会产生重复——这让「重新处理一篇文档」是安全的。
+
+- 为什么需要：解析切块产出的 chunk 此前只在内存里，不能检索。这一层是 GraphRAG 的地基——把 chunk 连同来源位置和向量一起存进 Neo4j，提问时才能「先向量召回相关片段，再顺着图谱扩展」，并且每个召回结果都带得回 `document_id + 字符偏移 + 页码 + 标题路径`，满足「引用可追溯」这条硬规则。
+
+- 为什么这么做（分层理由）：
+  - **`clients/graph.py` 只管驱动生命周期，业务读写单独成 `app/graph/`**：连接管理（建/探/关）和「写什么图、怎么查」是两件事，分开后换 schema 不动连接、换连接不动业务。
+  - **不为 Document/Chunk 另造 pydantic 模型**：直接复用解析层的 `ParsedDocument`/`Chunk`/`SourceLocation` 作写入入参，避免同一份数据有两套模型来回转换。只为「查询结果」新增 `ChunkHit`（多一个 score 字段，是新形状）。
+  - **维度（EMBEDDING_DIM）走配置、不硬编码**：换 embedding 模型维度就变（3-large=3072、ada-002=1536）。同一个配置值既喂给「建索引」也喂给「写入前校验」，保证两者永远一致；写入前逐条校验向量长度，维度不符直接报错，避免脏数据进库后查询才崩。
+  - **schema 初始化放 lifespan 且失败只告警**：约束/索引都用 `IF NOT EXISTS`，重复启动无副作用；Neo4j 没起来时只 warning 不阻断 FastAPI 启动，和 `/health/deps`「依赖挂了也不崩」的哲学一致。
+
+- 踩了什么坑：
+  - **向量索引建好后不是立刻能查**：`CREATE VECTOR INDEX` 后索引在后台异步构建（POPULATING），此时查询会抛 `51N63`。必须 `CALL db.awaitIndexes(120)` 等它变 ONLINE 再用。
+  - **索引维度不能用 Cypher 参数**：`OPTIONS {indexConfig:{...}}` 里的维度在「规划期」求值，不接受 `$dim` 绑定，只能把数字插值进 DDL 字符串。因维度来自可信的整数配置（非用户输入），插值是安全的。
+  - **共享库下的索引维度冲突**：所有 worktree 连同一个 Neo4j、同一个数据库，向量索引名又固定。生产用 3072 维，但集成测试为了快用 8 维合成向量——测试 fixture 必须先 `DROP INDEX ... IF EXISTS` 再以测试维度重建，跑完真实数据前再恢复 3072。这是「同容器同库跨 worktree 共享」约定的真实代价，并行写图谱要错峰。
+  - **`conda run` 不支持多行 `python -c`**：临时探测/冒烟脚本要写成 `.py` 文件再 `conda run -n myself python 文件`，不能把带换行的代码塞进 `-c`（会报 NotImplementedError）。
