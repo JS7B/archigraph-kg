@@ -1,0 +1,40 @@
+/* idle：呼吸（上下浮动）。做出可见效果，作为 CSS 分层方案的样板。眨眼等细节留待后续。 */
+@keyframes breathe {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+.anim-idle {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+/* 以下 11 个状态为占位：先复用一个轻微动作，保证类名存在、可被 stageMap 引用。
+   后续按 frontend/docs/pixel-agent-guide.md 的步骤逐个补全为对应拟物动作。 */
+@keyframes nudge {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+
+.anim-uploading,
+.anim-parsing,
+.anim-extracting,
+.anim-linking,
+.anim-indexing,
+.anim-searching,
+.anim-checking,
+.anim-writing,
+.anim-deleting,
+.anim-rebuilding {
+  animation: nudge 1.2s ease-in-out infinite;
+}
+
+/* error：定格 + 轻微抖动，区别于进行中状态。 */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-1px); }
+  75% { transform: translateX(1px); }
+}
+
+.anim-error {
+  animation: shake 0.5s ease-in-out 2;
+}

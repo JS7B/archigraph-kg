@@ -1,0 +1,100 @@
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  image-rendering: pixelated;
+}
+
+.scene {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.agent {
+  position: relative;
+  width: 48px;
+  height: 64px;
+}
+
+.head {
+  position: absolute;
+  top: 0;
+  left: 12px;
+  width: 24px;
+  height: 20px;
+  background: #fcd9b6;
+  border-radius: 2px;
+}
+
+.glasses {
+  position: absolute;
+  top: 7px;
+  left: 2px;
+  width: 20px;
+  height: 4px;
+  background: var(--color-accent);
+  opacity: 0.7;
+}
+
+.body {
+  position: absolute;
+  top: 20px;
+  left: 8px;
+  width: 32px;
+  height: 28px;
+  background: var(--color-accent);
+  border-radius: 2px;
+}
+
+.armLeft, .armRight {
+  position: absolute;
+  top: 22px;
+  width: 6px;
+  height: 18px;
+  background: #fcd9b6;
+}
+
+.armLeft { left: 4px; transform-origin: top center; }
+.armRight { right: 4px; transform-origin: top center; }
+
+.prop {
+  position: absolute;
+  top: 48px;
+  left: 18px;
+  width: 12px;
+  height: 12px;
+  background: var(--color-accent-border);
+  opacity: 0;
+}
+
+.label {
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.devControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+  margin-top: var(--space-2);
+}
+
+.devBtn, .devBtnActive {
+  font-size: 10px;
+  padding: 2px 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 2px;
+}
+
+.devBtnActive {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent-border);
+  color: var(--color-accent);
+}

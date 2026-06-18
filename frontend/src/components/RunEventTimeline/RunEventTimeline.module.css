@@ -1,0 +1,21 @@
+.list {
+  list-style: none;
+  font-size: var(--text-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.item {
+  color: var(--color-text-muted);
+}
+
+.current {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.empty {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
