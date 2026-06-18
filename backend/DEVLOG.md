@@ -23,3 +23,26 @@
   - **neo4j 6.x 的连通性探测写法**：本机装的是 neo4j 6.2.0。早期教程里 `driver.verify_connectivity()` 在不同版本行为/可用性有差异，这里直接用更稳的 `driver.execute_query("RETURN 1")`——能跑通就说明连接、认证、查询全链路 OK，语义比单纯握手更可靠。
   - **driver 是“懒连接”**：`GraphDatabase.driver(...)` 这一步并不会立刻连数据库，真正建连接发生在第一次执行查询时。所以 lifespan 里建 driver 不会因为 Neo4j 没起来而失败，连不上的暴露点统一落在 `/health/deps` 的 `execute_query`，正好被它的 `try/except` 接住降级——测试因此不依赖真实 Neo4j 也能过。
   - **worktree 没有 .env**：当前在隔离的 git worktree 里工作，仓库根没有 `.env`。按要求从 `.env.example` 复制了一份测试用 `.env`（把 `NEO4J_PASSWORD` 改成本机 Neo4j 容器的密码 `TestPass12345`，LLM 字段保持占位），验证完毕。`.env` 已被 `.gitignore` 忽略，不会误提交。
+
+## 2026-06-18 文档解析与切块
+
+- 做了什么：实现纯解析库 `app/parsing/`——txt/Markdown/PDF 单文件解析 + GitHub 目录导入，统一产出带来源元数据（字符偏移 + 页码 + 标题路径）的 Chunk 列表。两段式：parser 抽文本切语义块，chunker 聚合 + 超长拆分。全套 TDD，全量回归 43 passed。
+
+- 这是什么：
+  - **chunk（切块）**：把长文档切成小片段，是后续向量检索和 GraphRAG 的最小证据单元。切太大检索不准、切太小丢上下文，所以要按语义边界切并控制大小。
+  - **provenance（来源追溯）**：每个 chunk 记住它在原文的精确位置（第几个字符到第几个字符、第几页、哪个标题下），这样回答引用时能定位回原文高亮，是本项目「引用可追溯」硬要求的地基。
+  - **PyMuPDF（fitz）**：一个 PDF 文本抽取库，逐页拿出文字层。扫描版 PDF 没有文字层（只有图片），它拿不到文本——我们只记 warning 不做 OCR。
+
+- 为什么需要：所有下游能力（图谱、检索、问答）都吃 chunk。没有稳定、可追溯的 chunk，后面全都立不住。
+
+- 为什么这么做（关键取舍）：
+  - **parser 与 chunker 解耦**：解析是格式相关的脏活，切块是格式无关的策略。分开后换切块策略不动 parser，加新格式只写新 parser。
+  - **偏移单位用字符不用 token**：token 计数要 tokenizer，会绑定具体模型、加依赖；本项目不绑厂商，字符数最简单稳定。
+  - **核心不变量 `raw_text[start:end] == chunk.text`**：每个 parser 和 chunker 都有测试断言它，这是「引用能落回原文」的机器化保证。
+  - **全短段落文档无 chunk 间 overlap（有意决策，备查）**：overlap 只在「单个超长 Block 内部滑窗」时产生；若文档全是短段落，聚合路径不人为加重叠。理由：结构感知切分已用自然边界保证语义完整，跨段再加重叠收益小，还会让偏移区间互相纠缠、复杂化引用高亮。若后续评估发现召回因缺重叠而变差，再在聚合层引入可配置 overlap。
+  - **chunker 不做小块回填（规划阶段砍掉的死代码）**：原计划有「小尾块并入前块」的第 3 步，落地前审查发现它与「贪心聚合 + 同页同标题守卫」的条件完全重叠——能并的在聚合阶段就并了，跨页/跨标题的小块用同样守卫照样并不了。回填永不触发，且若强行跨边界并入会污染 provenance，与「引用优先」冲突。故删除。教训：动手前推演控制流，能在写代码前砍掉死逻辑。
+  - **Markdown 标题文字只计入正文块一次**：标题行与其后正文合为同一 Block，不单独成块，避免标题在 chunk 里重复。
+
+- 踩了什么坑：
+  - **本机有两个 Python**：系统默认 `python` 是 3.14（没装项目依赖，连 pytest 都没有），项目依赖全在 conda `myself` 环境（3.12）。跑测试必须显式 `conda run -n myself python -m pytest`，否则报 `No module named pytest`。这是「环境隔离」的典型表现——别假设 `python` 指向你想要的那个。
+  - **PyMuPDF 包名与导入名不一致**：pip 装的是 `PyMuPDF`，代码里却 `import fitz`。这是历史遗留命名，记住「装 PyMuPDF、导 fitz」即可。
