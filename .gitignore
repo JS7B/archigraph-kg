@@ -41,3 +41,6 @@ runs/
 .DS_Store
 Thumbs.db
 .superpowers/
+
+# subagent-driven-development working-tree reports
+/sdd/
