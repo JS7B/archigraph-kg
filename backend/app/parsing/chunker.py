@@ -3,8 +3,8 @@
 偏移与 text 一致性：chunk.text 一律取 raw_text[start:end]，保证
 raw_text[chunk.char_start:chunk.char_end] == chunk.text。
 
-注意：本模块假设输入 Block 已经 <= max_chars（超长预拆见 split_oversized_block，
-由 Task 3 在调用前应用）。
+超长 Block 由 chunk_blocks 内部先调 split_oversized_block 预拆，再做聚合——
+调用方无需自己预拆。
 
 不做小块回填：贪心聚合已用「适配 max_chars 且同页同标题」合并所有能合并的相邻块；
 跨页/跨标题的微小尾块不回填（回填会污染 provenance），是 provenance 优先的有意产物。
