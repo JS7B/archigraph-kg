@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { apiFetch, ApiError, BASE_URL } from '../../api/client'
 import { Button, Card, Chip, DataValue, Eyebrow, StatusBadge } from '../../components/ui'
-import { mockDocuments } from '../../mocks'
-import type { DocumentSourceType, IndexStatus, ParseStatus } from '../../types'
+import { useRunEvents } from '../../hooks/useRunEvents'
+import type { DocumentMeta, DocumentSourceType, IndexStatus, ParseStatus } from '../../types'
 import styles from './LibraryView.module.css'
 
 const sourceTypeLabels: Record<DocumentSourceType, string> = {
@@ -39,14 +40,107 @@ const indexStatusTones: Record<IndexStatus, 'success' | 'error' | 'info' | 'neut
   failed: 'error',
 }
 
+interface IngestRunCreated {
+  runId: string
+  documentId: string
+  documentName: string
+}
+
+interface DeleteRunCreated {
+  runId: string
+  documentId: string
+}
+
+// 后端支持的扩展名（与 documents.py _SUPPORTED 对齐）。
+const ACCEPTED_EXT = '.md,.txt,.pdf'
+
 export function LibraryView() {
+  const [documents, setDocuments] = useState<DocumentMeta[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [activeRunId, setActiveRunId] = useState<string | null>(null)
+  const [runError, setRunError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const { events, currentStage } = useRunEvents(activeRunId)
+  const isBusy = activeRunId !== null
+
+  const refresh = useCallback(async () => {
+    try {
+      const list = await apiFetch<DocumentMeta[]>('/api/documents')
+      setDocuments(list)
+      setLoadError(null)
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : '请求失败，请确认后端已启动'
+      setLoadError(msg)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  // 终态到达：刷新文档列表并结束 Run 订阅。
+  useEffect(() => {
+    if (!activeRunId) return
+    const last = events[events.length - 1]
+    if (!last) return
+    if (last.status === 'succeeded') {
+      setActiveRunId(null)
+      setRunError(null)
+      void refresh()
+    } else if (last.status === 'failed') {
+      setActiveRunId(null)
+      setRunError(last.message || '操作失败')
+    }
+  }, [events, activeRunId, refresh])
+
+  async function handleUpload(file: File) {
+    // multipart 上传：必须用原生 fetch，apiFetch 会强制 JSON content-type。
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const res = await fetch(`${BASE_URL}/api/documents`, { method: 'POST', body: form })
+      if (!res.ok) {
+        let msg = res.statusText
+        try {
+          const body = await res.json()
+          if (body?.error?.message) msg = body.error.message
+        } catch {
+          /* 非 JSON 错误体，沿用 statusText */
+        }
+        setRunError(msg)
+        return
+      }
+      const { runId } = (await res.json()) as IngestRunCreated
+      setRunError(null)
+      setActiveRunId(runId)
+    } catch (err) {
+      setRunError(err instanceof Error ? err.message : '上传请求失败')
+    }
+  }
+
+  async function handleDelete(documentId: string) {
+    try {
+      const { runId } = await apiFetch<DeleteRunCreated>(
+        `/api/documents/${encodeURIComponent(documentId)}`,
+        { method: 'DELETE' },
+      )
+      setRunError(null)
+      setActiveRunId(runId)
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : '删除请求失败'
+      setRunError(msg)
+    }
+  }
+
   const summary = useMemo(
     () => ({
-      documentCount: mockDocuments.length,
-      chunkCount: mockDocuments.reduce((total, document) => total + document.chunkCount, 0),
+      documentCount: documents.length,
+      chunkCount: documents.reduce((total, document) => total + document.chunkCount, 0),
     }),
-    [],
+    [documents],
   )
+
+  const lastMessage = events[events.length - 1]?.message
 
   return (
     <section className={styles.library}>
@@ -62,20 +156,37 @@ export function LibraryView() {
             <DataValue label="chunks">{summary.chunkCount}</DataValue>
             <span className={styles.summaryText}>个可追溯片段</span>
           </div>
+          {isBusy && (
+            <div className={styles.summary}>
+              <Chip tone="accent">{currentStage} 进行中</Chip>
+              {lastMessage && <span className={styles.summaryText}>{lastMessage}</span>}
+            </div>
+          )}
+          {runError && <div className={styles.runError}>{runError}</div>}
+          {loadError && <div className={styles.runError}>加载失败：{loadError}</div>}
         </div>
         <div className={styles.actions}>
-          <Button variant="primary" onClick={() => { /* 占位：后端上传接口就绪后接入 */ }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ACCEPTED_EXT}
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) void handleUpload(file)
+              // 清空 value 允许重复选择同一文件触发 onChange。
+              event.target.value = ''
+            }}
+          />
+          <Button variant="primary" disabled={isBusy} onClick={() => fileInputRef.current?.click()}>
             上传文档
-          </Button>
-          <Button variant="secondary" onClick={() => { /* 占位：后端仓库导入接口就绪后接入 */ }}>
-            导入仓库
           </Button>
         </div>
       </header>
 
-      {mockDocuments.length > 0 ? (
+      {documents.length > 0 ? (
         <div className={styles.list} aria-label="文档列表">
-          {mockDocuments.map((document) => (
+          {documents.map((document) => (
             <Card key={document.id} className={styles.documentCard} interactive padding="lg">
               <div className={styles.cardHeader}>
                 <div className={styles.documentNameGroup}>
@@ -102,10 +213,12 @@ export function LibraryView() {
               </div>
 
               <div className={styles.cardActions}>
-                <Button size="sm" variant="ghost" onClick={() => { /* 占位：后端重建索引接口就绪后接入 */ }}>
-                  重建索引
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => { /* 占位：后端删除接口就绪后接入 */ }}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={isBusy}
+                  onClick={() => handleDelete(document.id)}
+                >
                   删除
                 </Button>
               </div>
@@ -117,7 +230,7 @@ export function LibraryView() {
           <Eyebrow>Empty Library</Eyebrow>
           <h2 className={styles.emptyTitle}>还没有文档</h2>
           <p className={styles.emptyCopy}>上传一份文档，开始构建可追溯引用的个人知识库。</p>
-          <Button variant="primary" onClick={() => { /* 占位：后端上传接口就绪后接入 */ }}>
+          <Button variant="primary" disabled={isBusy} onClick={() => fileInputRef.current?.click()}>
             上传文档
           </Button>
         </Card>

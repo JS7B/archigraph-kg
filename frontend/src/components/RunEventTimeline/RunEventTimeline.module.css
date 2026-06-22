@@ -55,11 +55,6 @@
   background: var(--color-info-soft);
 }
 
-.statusProgress {
-  color: var(--color-warning);
-  background: var(--color-warning-soft);
-}
-
 .statusDone {
   color: var(--color-success);
   background: var(--color-success-soft);

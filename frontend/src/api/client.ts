@@ -1,4 +1,5 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+// 后端基址。apiFetch 与 SSE 客户端共享，避免复制（规格 §SSE 关键设计点）。
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 // 对接后端统一错误结构 {"error": {"type", "message"}}。
 export class ApiError extends Error {

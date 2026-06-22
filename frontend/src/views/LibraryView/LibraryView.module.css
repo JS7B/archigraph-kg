@@ -157,3 +157,9 @@
   font-size: var(--text-base);
   line-height: var(--leading-relaxed);
 }
+
+.runError {
+  color: var(--color-error);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}

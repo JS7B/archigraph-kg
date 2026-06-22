@@ -39,7 +39,7 @@ export function CitationPanel({ citations, activeChunkId }: CitationPanelProps) 
               <sup className={styles.index}>[{citation.index}]</sup>
               <div className={styles.body}>
                 <div className={styles.source}>
-                  <strong className={styles.documentName}>{citation.documentName}</strong>
+                  <strong className={styles.documentName}>{citation.documentId}</strong>
                   <DataValue label="loc">{citation.location}</DataValue>
                 </div>
                 <div className={styles.trace}>

@@ -69,3 +69,9 @@
 .timelinePanel {
   flex: 1;
 }
+
+.runError {
+  margin-top: var(--space-2);
+  color: var(--color-error);
+  font-size: var(--text-sm);
+}
