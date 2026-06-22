@@ -19,6 +19,8 @@ _CONSTRAINTS = (
     "FOR (d:Document) REQUIRE d.document_id IS UNIQUE",
     "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS "
     "FOR (c:Chunk) REQUIRE c.chunk_id IS UNIQUE",
+    "CREATE CONSTRAINT entity_id_unique IF NOT EXISTS "
+    "FOR (e:Entity) REQUIRE e.entity_id IS UNIQUE",
 )
 
 

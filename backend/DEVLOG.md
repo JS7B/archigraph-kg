@@ -70,3 +70,65 @@
   - **索引维度不能用 Cypher 参数**：`OPTIONS {indexConfig:{...}}` 里的维度在「规划期」求值，不接受 `$dim` 绑定，只能把数字插值进 DDL 字符串。因维度来自可信的整数配置（非用户输入），插值是安全的。
   - **共享库下的索引维度冲突**：所有 worktree 连同一个 Neo4j、同一个数据库，向量索引名又固定。生产用 3072 维，但集成测试为了快用 8 维合成向量——测试 fixture 必须先 `DROP INDEX ... IF EXISTS` 再以测试维度重建，跑完真实数据前再恢复 3072。这是「同容器同库跨 worktree 共享」约定的真实代价，并行写图谱要错峰。
   - **`conda run` 不支持多行 `python -c`**：临时探测/冒烟脚本要写成 `.py` 文件再 `conda run -n myself python 文件`，不能把带换行的代码塞进 `-c`（会报 NotImplementedError）。
+
+## 2026-06-18 实体识别与关系抽取
+
+- 做了什么：新增 `app/extraction/` 抽取层——逐 chunk 调 LLM（JSON 模式）抽实体与关系、文档内按名称归一合并去重、写入 Neo4j（`MENTIONS` / `RELATES`）。22 个测试全通（含真实 LLM 抽取），端到端冒烟从一篇文档抽出 12 实体 / 10 关系，关系证据全部能落回 chunk。
+
+- 这是什么：
+  - **结构化抽取（structured extraction）**：让大模型不是返回一段话，而是返回固定格式的 JSON（这里是 `{entities:[...], relations:[...]}`），程序能直接解析成对象。我们用 OpenAI 接口的 `response_format={"type":"json_object"}`（即「JSON 模式」）强制模型只吐 JSON，再用 Pydantic 校验字段，省去从自由文本里抠数据。
+  - **实体 / 关系 / Mention**：实体是文档里的关键对象（如 FastAPI、Neo4j）；关系是实体间的语义连接（如「FastAPI 依赖 Pydantic」）；Mention 是「某实体在某个 chunk 里出现过」这件事，在图里就是 `(:Chunk)-[:MENTIONS]->(:Entity)` 这条边——它把抽象实体接回原文，是「引用可追溯」的基石。
+  - **实体合并去重**：同一篇文档里，不同 chunk 可能都提到「FastAPI」，抽出来就是多个实体对象。合并就是把「归一化名（小写去空格）+ 类型」相同的认作同一个实体，mention 累积、描述合并，只在图里建一个节点。
+
+- 为什么需要：上一板块只把 chunk 和向量存进了图，图里还没有「知识」。抽取这一步把文本里的实体和关系结构化出来连成网，GraphRAG 问答时才能「先向量召回 chunk，再顺着实体关系扩展邻域」。每条关系都带 `evidence_chunk_id`，保证答案里引用的关系能回溯到原文，满足硬规则。
+
+- 为什么这么做（关键取舍）：
+  - **用 JSON 模式而非 function calling**：两者都能拿结构化输出，但 JSON 模式更简单、对 OpenAI-compatible 第三方端点兼容性更好（实测 deepseek/qwen/glm 都支持）。代价是要在 prompt 里显式出现「json」字样（JSON 模式的硬性要求），否则部分服务端会报错——所以 system 和 user 文案都写了 JSON，并用单测 `test_prompt` 守住这条不被人误删。
+  - **逐 chunk 抽取**：每个 chunk 单独调一次 LLM，mention 天然精确到 chunk（这条 chunk 抽出的实体，证据就是这条 chunk）。代价是调用次数多；但换来引用可追溯最稳，跨 chunk 的重复实体留到合并阶段统一处理。
+  - **名称归一精确合并（不做向量近义合并）**：先用最简单可靠的「归一名+类型相等」合并，跑通主链路。近义词合并（如 K8s=Kubernetes）更准但要额外调 embedding、引入误合并风险，等评估阶段确有需要再加——符合「先简单、再按需」。
+  - **业务关系统一落 `:RELATES`、类型作属性**：所有关系在 Neo4j 里都是 `:RELATES` 这一种边，具体语义（依赖/使用/组成…）放在 `type` 属性里。这样图 schema 稳定、查询统一，等样本和评估稳定后再判断是否要拆成独立边类型。
+  - **单 chunk 失败不中断整文档**：某个 chunk 多次抽取失败就记录错误跳过（沿用目录导入的容错风格），返回统计里带 `failed_chunks`，避免一颗老鼠屎坏一整锅。
+  - **抽取层与图谱写入层解耦**：`extract_and_ingest` 假定 Document/Chunk 已由上一板块 `ingest_document` 写好，自己只写 Entity/MENTIONS/RELATES；MENTIONS 用 `MATCH` 找 chunk（不 `MERGE`），避免凭空造出孤立 Chunk 节点。
+
+- 踩了什么坑：
+  - **JSON 模式必须 prompt 里有「json」字样**：OpenAI 的 json_object 模式有个硬性约束——请求消息里必须出现「json」这个词，否则端点直接报错。容易在改文案时不小心删掉，所以加了单测锁定。
+  - **关系两端实体名可能对不上**：LLM 在 relations 里写的 source/target 是实体名，偶尔和 entities 里的名字大小写/写法不一致，或指向没抽出来的实体。合并层的策略是：解析不到就**丢弃这条关系并告警**，绝不建一条指向空节点的脏边。
+  - **Entity 必须带 document_id**：测试清理是按 `document_id STARTS WITH 'test_'` 删节点，Entity 若不存 document_id 就会被漏删，污染跨 worktree 共享的同一个库。写图时强制 SET 了 document_id。
+  - **conda run 不支持多行 `python -c`**：和上一板块一样，临时冒烟脚本要落成 .py 文件再 `conda run -n myself python 文件` 跑。
+
+## 2026-06-22 GraphRAG 检索与回答
+
+- 做了什么：新增 `app/qa/` 问答编排层，把前三个板块（向量召回+实体关系图谱）串成 GraphRAG 问答：问题 embedding → 向量召回 chunk → reranker 重排 → 1 跳实体邻域扩展 → 组装上下文 → LLM 生成带引用答案。暴露 `POST /api/chat` 与 `GET /api/chunks/{id}`。全链手写，不引第三方 GraphRAG 框架。测试 18 个全通，端到端问答冲烟答案准确且引用全部可回链。
+
+- 这是什么：
+  - **GraphRAG**：在普通向量检索（RAG）基础上，额外利用知识图谱的实体关系。召回到相关 chunk 后，顺着「这些 chunk 提到了哪些实体」、「这些实体又和谁有关系」扩展，把图谱里的结构信息一起喞给 LLM，答得更全面。
+  - **reranker（重排模型）**：向量检索快但粗（只看语义方向）；重排模型（bge-reranker-v2-m3）拿问题和每个 chunk 逐一精算相关分，把最相关的提到前面。先向量召回宽一点（top 10）再用 reranker 筛出 top 5，准又不浪费算力。
+  - **带引用答案**：把召回的 chunk 编号 [1][2]…喞给 LLM，要求它每句论断都标上来源角标。答案里的 [n] 能顺着 Citation 找回具体 chunk 原文——这就是「引用可追溯」。
+
+- 为什么需要：前三个板块把知识存进了图，但还不能回答问题。这一层才是项目的核心价值：让用户问一句，系统从图谱里找证据、生成可追溯到原文的答案。
+
+- 为什么这么做（关键取舍）：
+  - **纯手写 Cypher，不引 neo4j-graphrag/langchain/llamaindex**：调研过四个主流方案。结论是——手写 `CALL db.index.vector.queryNodes` + 几句图遍历 Cypher，和 neo4j-graphrag 的 retriever 底层做的是同一件事，但零新增依赖、编排 100
+## 2026-06-22 GraphRAG 检索与回答
+
+- 做了什么：新增 `app/qa/` 问答编排层，把前三个板块（向量召回 + 实体关系图谱）串成 GraphRAG 问答：问题 embedding → 向量召回 chunk → reranker 重排 → 1 跳实体邻域扩展 → 组装上下文 → LLM 生成带引用答案。暴露 `POST /api/chat` 与 `GET /api/chunks/{id}`。全链手写，不引第三方 GraphRAG 框架。测试 18 个全通，端到端问答冒烟答案准确且引用全部可回链。
+
+- 这是什么：
+  - **GraphRAG**：在普通向量检索（RAG）基础上，额外利用知识图谱的实体关系。召回到相关 chunk 后，顺着「这些 chunk 提到了哪些实体」「这些实体又和谁有关系」扩展，把图谱里的结构信息一起喂给 LLM，答得更全面。
+  - **reranker（重排模型）**：向量检索快但粗（只看语义方向）；重排模型（bge-reranker-v2-m3）拿问题和每个 chunk 逐一精算相关分，把最相关的提到前面。先向量召回宽一点（top 10）再用 reranker 筛出 top 5，准又不浪费算力。
+  - **带引用答案**：把召回的 chunk 编号 [1][2]… 喂给 LLM，要求它每句论断都标上来源角标。答案里的 [n] 能顺着 Citation 找回具体 chunk 原文——这就是「引用可追溯」。
+
+- 为什么需要：前三个板块把知识存进了图，但还不能回答问题。这一层才是项目的核心价值：让用户问一句，系统从图谱里找证据、生成可追溯到原文的答案。
+
+- 为什么这么做（关键取舍）：
+  - **纯手写 Cypher，不引 neo4j-graphrag/langchain/llamaindex**：调研过四个主流方案。结论是——手写 `CALL db.index.vector.queryNodes` + 几句图遍历 Cypher，和 neo4j-graphrag 的 retriever 底层做的是同一件事，但零新增依赖、编排 100% 自控。其他框架要么太重（langchain 拉 15-25 个包）、要么太黑盒（微软 GraphRAG 要求自己的 parquet 管道，不对接现有图）、要么与 neo4j driver 6.x 版本冲突（llamaindex）。这正是 CLAUDE.md「保留编排控制权 + 极简依赖」决策边界的落地。
+  - **1 跳邻域而非多跳**：只扩 1 跳（chunk→实体→邻居实体）。多跳会图爆炸、引入噪声，先拿最简的稳定版。
+  - **引用只保留答案里真实出现的角标**：LLM 可能给了上下文但没全用。解析答案文本里实际出现的 [n]，只把被引用的 chunk 计入 citations，避免虚报引用。
+  - **压幻觉**：system prompt 明确要求「只依据给定片段作答、无依据就说无法回答」，对齐「明显幻觉率 ≤ 20%」验收指标。
+  - **rerank 失败降级不中断**：reranker 端点挂了就回退到按向量 score 取 top-N，问答照常跑。
+  - **不落 Run/Answer 图节点**：本板块的 Answer 是 API 响应对象，引用靠 Citation.chunk_id 追溯；Run/RunEvent/Answer 节点持久化是下一个「Run 与事件流」板块的事，边界划清楚。
+
+- 踩了什么坑：
+  - **reranker 不走 OpenAI SDK**：openai 库只有 chat/embeddings，没有 rerank 端点。rerank 是各家自定义的 `POST /rerank`，用 httpx 直调；payload `{model,query,documents,top_n}`，返回 `results:[{index,relevance_score}]` 降序。
+  - **TestClient 不触发 lifespan**：`TestClient(create_app())` 不会跑 lifespan，`app.state.neo4j` 是空的，路由里 `request.app.state.neo4j` 报 AttributeError。解法：测试里手动 `app.state.neo4j = driver` 注入现有 driver（不走 lifespan、不重建 schema）。
+  - **真实 3072 维与测试 8 维冲突**：API 集成测试里向量召回部分 monkeypatch 掉（召回本身 graph 板块已测），只让真实 rerank+chat 跑，避开维度冲突。

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     chat_model: str = ""
     embedding_model: str = ""
     embedding_dim: int = 3072
+    rerank_model: str = "bge-reranker-v2-m3"
 
     # Neo4j
     neo4j_uri: str = ""
