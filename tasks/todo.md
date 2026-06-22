@@ -140,20 +140,20 @@
 
 > A 板块已交付文档上传同步链路（见下方「文档上传与文档库 API」）；本节为 B 板块（异步 Run + SSE）。
 
-- [ ] 实现 Run 记录。
-- [ ] 实现 RunEvent 记录。
-- [ ] 实现 SSE 或轮询事件接口。
-- [ ] 映射文档解析事件。
-- [ ] 映射实体和关系抽取事件。
-- [ ] 映射图谱写入和索引事件。
-- [ ] 映射检索和回答生成事件。
-- [ ] 映射删除和重建事件。
+- [x] 实现 Run 记录。（app/runs/models.py：Run + RunKind[ingest/chat/delete] + RunStatus）
+- [x] 实现 RunEvent 记录。（stage 锁定前端 12 枚举 + status + message + answer 终态 payload）
+- [x] 实现 SSE 或轮询事件接口。（/api/runs/{id}/events/stream + /events 历史 + GET /api/runs/{id}）
+- [x] 映射文档解析事件。（run_ingest：uploading→parsing→extracting→indexing→done）
+- [x] 映射实体和关系抽取事件。（同上 extracting/indexing 阶段）
+- [x] 映射图谱写入和索引事件。（ingest_document + extract_and_ingest 各对应阶段）
+- [x] 映射检索和回答生成事件。（run_chat：searching→checking→writing→done，终态带 answer）
+- [x] 映射删除和重建事件。（run_delete：deleting→done；rebuilding 暂未触发，留作扩展）
 
 验证：
 
-- [ ] 前端能看到执行进度。
-- [ ] 失败时能看到失败步骤和错误摘要。
-- [ ] 像素 Agent 状态由真实事件驱动。
+- [x] 前端能看到执行进度。（SSE 流历史回放 + 实时推送 + 终态关闭）
+- [x] 失败时能看到失败步骤和错误摘要。（后台任务全程 try/except，失败 emit error + status=failed，SSE 流关闭）
+- [~] 像素 Agent 状态由真实事件驱动。（后端契约就绪，待前端 PixelAgent 接 SSE stage）
 
 ### 前端工作台
 
@@ -238,3 +238,4 @@
 - 2026-06-18：复用 feat/backend 完成「实体识别与关系抽取」。新增 app/extraction：逐 chunk 调 LLM（JSON 模式，response_format 透传且向后兼容）抽实体/关系、文档内归一名+类型精确合并去重、写入 Entity/MENTIONS/RELATES。每关系带 evidence_chunk_id、Mention 精确到 chunk（引用可追溯）；业务关系统一 :RELATES 类型作属性（遵守决策边界）；关系两端解析不到即丢弃防脏边；单 chunk 失败跳过+指数退避重试；Entity 加唯一约束并强制带 document_id（保共享库清理）。真连 Neo4j+真实 LLM 测试，全量 76 passed（main 上真实 LLM 测试因未配 key 而 skip）。同步勾选上一板块遗留的「写入 Entity/Relation」。
 - 2026-06-18：双线并行收获两个板块。后端 feat/backend 完成「GraphRAG 检索与回答」：app/qa 编排 向量召回→rerank→实体邻域扩展(MENTIONS/RELATES 1跳)→上下文组装([n]角标↔Citation)→LLM 带引用答案，新增 /api/chat 与 /api/chunks/{id}，Answer/Citation 用 camelCase alias 对齐前端契约，只保留答案正文真实出现的角标，关系带 evidence_chunk_id，全量 94 passed。前端 feat/frontend 完成 P1/P2/P3：精细化 token 体系 + 7 个共享 UI 基件 + dev 预览页、工作台/文档库/图谱探索三视图(mock + Cytoscape)、引用面板角标点击滚动定位 + chunkId 反查，mock 严格对齐 src/types，typecheck/build 通过，像素小人保持 idle 待用户亲调。两条经大脑 review（含核查 todo.md 未被前端误改、前后端 Citation 契约已对齐）后按先后端后前端顺序合入 main。
 - 2026-06-22：大脑 review 后端窗口「文档/图谱 API + Run 事件流」合并大方案，裁决拆 A/B 两个独立交付（先 A 后 B），并明确 /api/chat 异步化（用户确认要做）和 DELETE 语义归 B 板块。后端按裁决完成 A 板块「文档上传入库 API + Document 状态字段」：POST /api/documents 同步跑完整链路（parse→embed→ingest→extract），Document 落 name/source_type/parse_status/index_status/chunk_count 状态字段（writer 顺手 SET），GET 列表/详情直查图库，camelCase alias 对齐前端，MAX_UPLOAD_MB 走配置，try/finally 清理临时文件。document_id 沿用 parse_file 内部稳定 id（规避 chunk_id 幂等破坏），幂等测试双重断言（chunkCount + 图库 Chunk 节点数）。main 上全量 100 passed + 5 skipped。注：feat/backend worktree 因配了真实 LLM key，chat/extraction 真实 LLM 测试因配额耗尽(403)而失败，但属环境问题非代码缺陷（A 未碰 chat 代码），main 上无 key 正确 skip 不受影响——既有测试设计可加 is_configured gate，留待后续。A 合并入本地 main，待网络恢复推送。
+- 2026-06-22：后端 feat/backend 完成 B 板块「Run/事件流 + SSE + 异步化 + 图谱查询 API」。新增 app/runs：models（Run/RunEvent + Stage 12 枚举锁定前端契约 + RunStatus + RunKind[ingest/chat/delete]）、store（内存注册表 + asyncio.Queue 订阅 + 历史回放 + 终态关闭，不持久化对齐简单优先）、tasks（run_ingest/run_chat/run_delete 后台任务，全程 try/except + 失败 emit error 防 SSE 流卡死）。新增 routers/runs（SSE stream + /events 历史兜底 + GET /{id}，含心跳保活）、routers/graph（实体列表带边悬空过滤、1跳邻域去重、模糊搜索）。异步化：POST /api/documents 改返回 {runId,documentId}，POST /api/chat 改返回 {runId} 终态事件带 answer（方案 a，省往返），DELETE /api/documents/{id} 异步删（语义按裁决：删 Document+Chunk+MENTIONS，Entity 靠 MENTIONS 孤立性判定保留共享）。采纳上轮标记的既有问题改进：chat 真实 LLM 测试重构为 mock + seed，不再因配额失败。main 上全量 117 passed + 1 skipped（extraction 真实测试因 main 无 key 正确 skip）。契约变化已记录，前端切真实时需按新契约（runId + SSE 订阅）接入。
