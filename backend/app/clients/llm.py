@@ -1,5 +1,6 @@
-"""OpenAI-compatible LLM 薄封装：chat / embedding，以及配置状态探测。"""
+"""OpenAI-compatible LLM 薄封装：chat / embedding / rerank，以及配置状态探测。"""
 
+import httpx
 from openai import OpenAI
 
 from app.config import get_settings
@@ -46,3 +47,31 @@ def embed(texts: list[str]) -> list[list[float]]:
         input=texts,
     )
     return [item.embedding for item in resp.data]
+
+
+def rerank(
+    query: str, documents: list[str], *, top_n: int | None = None
+) -> list[tuple[int, float]]:
+    """对文档按与 query 的相关性重排，返回 [(原始索引, 相关性分数)] 降序。
+
+    OpenAI SDK 无 rerank 端点，直接 POST {base_url}/rerank。documents 为空时返回空列表。
+    """
+    if not documents:
+        return []
+    settings = get_settings()
+    payload: dict = {
+        "model": settings.rerank_model,
+        "query": query,
+        "documents": documents,
+    }
+    if top_n is not None:
+        payload["top_n"] = top_n
+    resp = httpx.post(
+        f"{settings.openai_base_url.rstrip('/')}/rerank",
+        headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+        json=payload,
+        timeout=60,
+    )
+    resp.raise_for_status()
+    results = resp.json()["results"]
+    return [(item["index"], item["relevance_score"]) for item in results]
