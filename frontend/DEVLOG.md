@@ -154,3 +154,57 @@
     `var(--space-8)`（64px），连一条引用都显示不全，滚动定位更无从谈起。改成
     240px（约可见两条 + 内部滚动），定位能力才有意义。这也提醒：间距 token 是
     给"间距"用的，不该挪用来当"组件高度上限"。
+
+## 2026-06-22 契约层改造：对齐 B 板块异步 + SSE
+
+- 做了什么：把前端从"同步 mock"改成"起异步 Run + 订阅 SSE 进度流"的真实契约。
+  新建 SSE 客户端（`api/sse.ts`），改造 `useRunEvents` 接真实事件流，问答/上传/删除
+  三个写场景全部改成「起 Run → 订阅 → 驱动 UI」，GET 类（文档列表）也接了真实后端。
+  RunEvent/Answer/Citation 类型逐字段对齐后端源码。像素小人本轮保持 idle（动画下一轮）。
+
+- 这是什么：
+  - **SSE（Server-Sent Events）**：浏览器原生协议，服务端可以单向、持续地把消息
+    推给浏览器（不像普通 HTTP 一问一答就结束）。用 `new EventSource(url)` 建立
+    连接，挂 `onmessage` 收消息，`close()` 释放。本项目后端把入库/问答/删除的
+    进度（正在解析、正在抽取、回答完成…）一条条推过来，前端据此更新时间线和小人。
+  - **异步 Run**：旧契约下 `POST /api/documents` 要等整条入库链路（解析→向量化→
+    写图库→抽实体）跑完才返回，前端干等几十秒没有反馈。新契约改成"立即返回
+    runId"，后台任务边跑边 emit 事件，前端订阅事件流就能看到实时进度。
+  - **终态（terminal）事件**：一条 Run 的最后一条事件，`status='succeeded'`（成功）
+    或 `'failed'`（失败）。后端发完它就关闭 SSE 流，前端也要在收到它时关闭
+    EventSource——否则连接会一直挂着，积累成"僵尸连接"泄漏资源。
+
+- 为什么需要：B 板块把后端改成异步后，旧前端的所有 mock 调用都按"同步拿到完整
+  结果"写的，类型和调用方式全对不上。不先改契约层，后续接真实数据 + 像素小人
+  动画都没法进行。这一轮专门把"数据形状"和"调用方式"一次性对齐，是承上启下的地基。
+
+- 为什么这么做：
+  - **写操作直连真实后端、GET 类保留 mock**：开发环境后端在 localhost:8000，
+    直连最简单（不必再造一套 mock SSE 适配层）。代价是前端开发时要起后端，但
+    本项目本就是前后端配套的，可接受。
+  - **`useRunEvents(runId)` 保留红线**：`currentStage` 只从真实事件派生，这是
+    硬规则"像素 Agent 状态必须来自真实 RunEvent"的技术保证。Hook 签名从无参改
+    成接 `runId`，谁订阅谁传 runId，状态来源清晰可追溯。
+  - **终态自动关闭 EventSource**：在 `onmessage` 里判到 succeeded/failed 立即
+    `source.close()`，`onerror` 也关。后端发完终态会断流，前端再关一次是双保险。
+  - **判终态用 `status` 而非 `stage`**：后端成功终态事件的 `stage` 是 `'idle'`
+    （"回到待命"），不是 `'done'`。如果用 stage 判就会漏掉终态，导致订阅永不结束。
+  - **`timestamp_ms` 用下划线**：后端 `RunEvent.timestamp_ms` 字段没加 camelCase
+    alias，序列化输出就是下划线名。前端类型直接用 `timestamp_ms`，省一层转换、
+    和后端源码一一对应、少踩坑。
+  - **上传用原生 fetch 而非 apiFetch**：multipart 上传（FormData）的 Content-Type
+    必须由浏览器自动带 boundary，而 `apiFetch` 会强制设 JSON content-type，会破坏
+    multipart 边界。所以上传这一处绕过 apiFetch 直接用 fetch + 共享的 BASE_URL。
+  - **本轮不做断线重连 + /events 历史补全**：简单优先。EventSource 自带断线重连，
+    下一轮如需补全再加 `/events` 一次性取回历史事件的兜底。
+
+- 踩了什么坑：
+  - **规格文字与后端实际契约不一致**：规格里写终态 `stage='done'`、`Answer` 带
+    `question`、`Citation` 带 `documentName`，但读后端源码发现全不一样（终态是
+    stage='idle'+status='succeeded'、Answer 无 question、Citation 是 documentId）。
+    教训：规格是"意图"，**契约以已验证的后端源码为准**，开工前必须逐字段核对，
+    不能照规格文字写代码。本次按后端实际对齐前端类型，并把不一致点记在计划里。
+  - **Chip 组件只有 neutral/accent 两档 tone**：LibraryView 里给"进行中"状态提示
+    误用了 `tone="info"`，build 报错。Chip 不像 StatusBadge 有 info/success/error
+    全套语义色——它只是轻量标签。改成 accent（强调进行中）即解决。这说明共享基件
+    的"能力边界"要心里有数，别假设它和别的基件一样全。

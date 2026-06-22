@@ -7,16 +7,14 @@ interface RunEventTimelineProps {
 }
 
 const statusLabel: Record<RunEventStatus, string> = {
-  started: 'started',
-  progress: 'progress',
-  done: 'done',
+  running: 'running',
+  succeeded: 'succeeded',
   failed: 'failed',
 }
 
 const statusClass: Record<RunEventStatus, string> = {
-  started: styles.statusStarted,
-  progress: styles.statusProgress,
-  done: styles.statusDone,
+  running: styles.statusStarted,
+  succeeded: styles.statusDone,
   failed: styles.statusFailed,
 }
 
@@ -33,11 +31,11 @@ export function RunEventTimeline({ events }: RunEventTimelineProps) {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
-        }).format(event.timestamp)
+        }).format(event.timestamp_ms)
 
         return (
           <li
-            key={`${event.stage}-${event.status}-${event.timestamp}`}
+            key={`${event.stage}-${event.status}-${event.timestamp_ms}`}
             className={`${styles.item} ${isCurrent ? styles.current : ''}`}
           >
             <span className={styles.marker} aria-hidden="true" />
@@ -47,7 +45,7 @@ export function RunEventTimeline({ events }: RunEventTimelineProps) {
                 <Chip className={statusClass[event.status]}>{statusLabel[event.status]}</Chip>
               </div>
               <p className={styles.message}>{event.message}</p>
-              <time className={styles.time} dateTime={new Date(event.timestamp).toISOString()}>
+              <time className={styles.time} dateTime={new Date(event.timestamp_ms).toISOString()}>
                 {timeLabel}
               </time>
             </div>

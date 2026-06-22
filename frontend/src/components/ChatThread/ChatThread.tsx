@@ -50,7 +50,7 @@ export function ChatThread({ messages, onCitationClick }: ChatThreadProps) {
                     className={styles.citationButton}
                     type="button"
                     onClick={() => onCitationClick(citation.chunkId)}
-                    aria-label={`查看引用 ${citation.index}：${citation.documentName} ${citation.location}`}
+                    aria-label={`查看引用 ${citation.index}：${citation.documentId} ${citation.location}`}
                   >
                     [{citation.index}]
                   </button>
