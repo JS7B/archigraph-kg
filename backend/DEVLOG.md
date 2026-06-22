@@ -132,3 +132,25 @@
   - **reranker 不走 OpenAI SDK**：openai 库只有 chat/embeddings，没有 rerank 端点。rerank 是各家自定义的 `POST /rerank`，用 httpx 直调；payload `{model,query,documents,top_n}`，返回 `results:[{index,relevance_score}]` 降序。
   - **TestClient 不触发 lifespan**：`TestClient(create_app())` 不会跑 lifespan，`app.state.neo4j` 是空的，路由里 `request.app.state.neo4j` 报 AttributeError。解法：测试里手动 `app.state.neo4j = driver` 注入现有 driver（不走 lifespan、不重建 schema）。
   - **真实 3072 维与测试 8 维冲突**：API 集成测试里向量召回部分 monkeypatch 掉（召回本身 graph 板块已测），只让真实 rerank+chat 跑，避开维度冲突。
+
+
+## 2026-06-22 文档上传入库 HTTP API（A 板块）
+
+- 做了什么：新增 `app/routers/documents.py`，把已完成的解析→embedding→写图→抽取链路用一个 HTTP 端点串起来。`POST /api/documents` 接收 multipart 上传，同步跑完整入库，返回结果摘要（documentId/chunkCount/extraction 统计）；`GET /api/documents` 列表、`GET /api/documents/{id}` 单文档详情直接查 Neo4j Document 节点。ingest_document 写入时顺带落状态字段（parse_status/index_status/chunk_count/name/source_type），供前端徽标。测试 10 passed + 1 skipped（无 PDF 样本）。
+
+- 这是什么：
+  - **multipart/form-data 上传**：HTTP 传文件的标准方式——请求体被切成多段（boundary 分隔），一段是文件内容、一段是表单字段。FastAPI 用 `UploadFile` 类型声明参数，自动解析。底层依赖 `python-multipart` 库（FastAPI 官方依赖）。
+  - **同步入库链路**：一个请求里跑完 parse→embed→ingest→extract 全流程才返回。简单直接，但请求耗时长（大文档会阻塞）。按大脑裁决，异步化（Run/SSE）留给 B 板块，A 先同步打通。
+
+- 为什么需要：前端现在全跑在 mock 数据上，三视图（文档库/图谱/工作台）看不到真实内容。这个端点一通，前端就能真正上传文档、触发入库、看到文档列表——从假数据切到真链路的第一步。
+
+- 为什么这么做（关键取舍）：
+  - **document_id 用源文件名，不是临时文件名**：上传文件先落临时盘（`NamedTemporaryFile`）让 parser 按文件读。但 `parse_file` 缺省用 `os.path.basename(path)` 当 document_id——若传临时路径，document_id 就是 `upload_xxxx.md`，同文件重复上传会因临时名不同而产生不同 id，**破坏 chunk_id 幂等**（chunk_id = document_id#chunk_index）。所以路由显式传 `document_id=源文件名`，保证幂等。
+  - **同步而非异步**：大脑裁决（backend-ruling-ab-split.md）——A 小而独立、可立刻验证；异步 Run/SSE 涉及前端契约变更和更大 review 风险，拆到 B 板块单独做。符合 CLAUDE.md「简单优先」。
+  - **状态字段顺带写 Neo4j，不另建表**：前端 DocumentMeta 需要 parseStatus/indexStatus/chunkCount 做徽标。Document 节点本身就在图库里，写入时顺手 SET 这些属性，GET 直接查图库即可，无需额外的状态表。
+  - **临时文件 try/finally 清理**：入库链路任一步可能抛异常，finally 块确保临时文件无论成败都删，不留在磁盘。测试里 mock `os.remove` 验证清理确实发生。
+
+- 踩了什么坑：
+  - **Pydantic v2 alias 模型要用 snake_case 构造需配 populate_by_name**：响应模型用 `Field(alias="entityCount")` 输出 camelCase，但内部代码用 `entity_count=...` 构造时 Pydantic v2 默认只认 alias，报 `Field required`。解法：`model_config = ConfigDict(populate_by_name=True)`，既能 snake 构造又能 camel 输出。
+  - **测试维度(8)与生产维度(3072)冲突**：路由调用 `ingest_document` 内部读 `get_settings().embedding_dim` 做维度校验（3072），但测试用 8 维占位向量。解法：测试 fixture 把配置实例的 `embedding_dim` 临时 monkeypatch 成 8（lru_cache 返回同一实例，可改属性），让 8 维向量通过校验并真实写入——写图逻辑本身不被 mock，仍走真实代码。
+  - **modelverse API key 配额耗尽**：全量回归时 2 个真实 LLM gate 测试（test_llm_real / test_chat_api）因 key 日限额 1000 用尽返回 403。非本次改动问题，待配额恢复后补真实端到端冒烟。

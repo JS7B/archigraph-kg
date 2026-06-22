@@ -9,10 +9,15 @@ from neo4j import Driver
 
 from app.config import get_settings
 from app.parsing.models import ParsedDocument
-
 _INGEST = """
 MERGE (d:Document {document_id: $document_id})
-  SET d.source_path = $source_path, d.doc_type = $doc_type
+  SET d.source_path = $source_path,
+      d.doc_type = $doc_type,
+      d.name = $name,
+      d.source_type = $source_type,
+      d.parse_status = $parse_status,
+      d.index_status = $index_status,
+      d.chunk_count = $chunk_count
 WITH d
 UNWIND $rows AS row
   MERGE (c:Chunk {chunk_id: row.chunk_id})
@@ -26,6 +31,16 @@ UNWIND $rows AS row
         c.embedding = row.embedding
   MERGE (d)-[:HAS_CHUNK]->(c)
 """
+
+
+def _file_name_from_path(path: str) -> str:
+    """从路径取文件名作为 Document.name；取不到就回退原路径。"""
+    try:
+        from pathlib import Path
+
+        return Path(path).name or path
+    except Exception:  # noqa: BLE001 — 路径解析失败不影响写入
+        return path
 
 
 def _chunk_rows(doc: ParsedDocument, embeddings: list[list[float]]) -> list[dict]:
@@ -54,6 +69,10 @@ def ingest_document(
     doc: ParsedDocument,
     embeddings: list[list[float]],
     *,
+    name: str | None = None,
+    source_type: str | None = None,
+    parse_status: str = "parsed",
+    index_status: str = "indexed",
     dim: int | None = None,
     database: str = "neo4j",
 ) -> int:
@@ -61,6 +80,9 @@ def ingest_document(
 
     校验向量与 chunk 数量一致、且每个向量维度等于 dim（缺省取配置 embedding_dim），
     防止维度与向量索引不一致导致写入或后续查询失败。dim 须与 ensure_schema 一致。
+
+    Document 节点顺带写入状态字段（name/source_type/parse_status/index_status/chunk_count），
+    供 GET /api/documents 直接查图库返回前端徽标。name/source_type 缺省从 doc 推导。
     """
     if len(embeddings) != len(doc.chunks):
         raise ValueError(
@@ -72,12 +94,22 @@ def ingest_document(
         if len(vec) != dim:
             raise ValueError(f"第 {i} 个向量维度 {len(vec)} 不等于 EMBEDDING_DIM {dim}")
 
+    if name is None:
+        name = _file_name_from_path(doc.source_path)
+    if source_type is None:
+        source_type = doc.doc_type
+
     rows = _chunk_rows(doc, embeddings)
     driver.execute_query(
         _INGEST,
         document_id=doc.document_id,
         source_path=doc.source_path,
         doc_type=doc.doc_type,
+        name=name,
+        source_type=source_type,
+        parse_status=parse_status,
+        index_status=index_status,
+        chunk_count=len(rows),
         rows=rows,
         database_=database,
     )
