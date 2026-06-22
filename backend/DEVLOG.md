@@ -70,3 +70,28 @@
   - **索引维度不能用 Cypher 参数**：`OPTIONS {indexConfig:{...}}` 里的维度在「规划期」求值，不接受 `$dim` 绑定，只能把数字插值进 DDL 字符串。因维度来自可信的整数配置（非用户输入），插值是安全的。
   - **共享库下的索引维度冲突**：所有 worktree 连同一个 Neo4j、同一个数据库，向量索引名又固定。生产用 3072 维，但集成测试为了快用 8 维合成向量——测试 fixture 必须先 `DROP INDEX ... IF EXISTS` 再以测试维度重建，跑完真实数据前再恢复 3072。这是「同容器同库跨 worktree 共享」约定的真实代价，并行写图谱要错峰。
   - **`conda run` 不支持多行 `python -c`**：临时探测/冒烟脚本要写成 `.py` 文件再 `conda run -n myself python 文件`，不能把带换行的代码塞进 `-c`（会报 NotImplementedError）。
+
+## 2026-06-18 实体识别与关系抽取
+
+- 做了什么：新增 `app/extraction/` 抽取层——逐 chunk 调 LLM（JSON 模式）抽实体与关系、文档内按名称归一合并去重、写入 Neo4j（`MENTIONS` / `RELATES`）。22 个测试全通（含真实 LLM 抽取），端到端冒烟从一篇文档抽出 12 实体 / 10 关系，关系证据全部能落回 chunk。
+
+- 这是什么：
+  - **结构化抽取（structured extraction）**：让大模型不是返回一段话，而是返回固定格式的 JSON（这里是 `{entities:[...], relations:[...]}`），程序能直接解析成对象。我们用 OpenAI 接口的 `response_format={"type":"json_object"}`（即「JSON 模式」）强制模型只吐 JSON，再用 Pydantic 校验字段，省去从自由文本里抠数据。
+  - **实体 / 关系 / Mention**：实体是文档里的关键对象（如 FastAPI、Neo4j）；关系是实体间的语义连接（如「FastAPI 依赖 Pydantic」）；Mention 是「某实体在某个 chunk 里出现过」这件事，在图里就是 `(:Chunk)-[:MENTIONS]->(:Entity)` 这条边——它把抽象实体接回原文，是「引用可追溯」的基石。
+  - **实体合并去重**：同一篇文档里，不同 chunk 可能都提到「FastAPI」，抽出来就是多个实体对象。合并就是把「归一化名（小写去空格）+ 类型」相同的认作同一个实体，mention 累积、描述合并，只在图里建一个节点。
+
+- 为什么需要：上一板块只把 chunk 和向量存进了图，图里还没有「知识」。抽取这一步把文本里的实体和关系结构化出来连成网，GraphRAG 问答时才能「先向量召回 chunk，再顺着实体关系扩展邻域」。每条关系都带 `evidence_chunk_id`，保证答案里引用的关系能回溯到原文，满足硬规则。
+
+- 为什么这么做（关键取舍）：
+  - **用 JSON 模式而非 function calling**：两者都能拿结构化输出，但 JSON 模式更简单、对 OpenAI-compatible 第三方端点兼容性更好（实测 deepseek/qwen/glm 都支持）。代价是要在 prompt 里显式出现「json」字样（JSON 模式的硬性要求），否则部分服务端会报错——所以 system 和 user 文案都写了 JSON，并用单测 `test_prompt` 守住这条不被人误删。
+  - **逐 chunk 抽取**：每个 chunk 单独调一次 LLM，mention 天然精确到 chunk（这条 chunk 抽出的实体，证据就是这条 chunk）。代价是调用次数多；但换来引用可追溯最稳，跨 chunk 的重复实体留到合并阶段统一处理。
+  - **名称归一精确合并（不做向量近义合并）**：先用最简单可靠的「归一名+类型相等」合并，跑通主链路。近义词合并（如 K8s=Kubernetes）更准但要额外调 embedding、引入误合并风险，等评估阶段确有需要再加——符合「先简单、再按需」。
+  - **业务关系统一落 `:RELATES`、类型作属性**：所有关系在 Neo4j 里都是 `:RELATES` 这一种边，具体语义（依赖/使用/组成…）放在 `type` 属性里。这样图 schema 稳定、查询统一，等样本和评估稳定后再判断是否要拆成独立边类型。
+  - **单 chunk 失败不中断整文档**：某个 chunk 多次抽取失败就记录错误跳过（沿用目录导入的容错风格），返回统计里带 `failed_chunks`，避免一颗老鼠屎坏一整锅。
+  - **抽取层与图谱写入层解耦**：`extract_and_ingest` 假定 Document/Chunk 已由上一板块 `ingest_document` 写好，自己只写 Entity/MENTIONS/RELATES；MENTIONS 用 `MATCH` 找 chunk（不 `MERGE`），避免凭空造出孤立 Chunk 节点。
+
+- 踩了什么坑：
+  - **JSON 模式必须 prompt 里有「json」字样**：OpenAI 的 json_object 模式有个硬性约束——请求消息里必须出现「json」这个词，否则端点直接报错。容易在改文案时不小心删掉，所以加了单测锁定。
+  - **关系两端实体名可能对不上**：LLM 在 relations 里写的 source/target 是实体名，偶尔和 entities 里的名字大小写/写法不一致，或指向没抽出来的实体。合并层的策略是：解析不到就**丢弃这条关系并告警**，绝不建一条指向空节点的脏边。
+  - **Entity 必须带 document_id**：测试清理是按 `document_id STARTS WITH 'test_'` 删节点，Entity 若不存 document_id 就会被漏删，污染跨 worktree 共享的同一个库。写图时强制 SET 了 document_id。
+  - **conda run 不支持多行 `python -c`**：和上一板块一样，临时冒烟脚本要落成 .py 文件再 `conda run -n myself python 文件` 跑。

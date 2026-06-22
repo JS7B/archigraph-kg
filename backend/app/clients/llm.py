@@ -24,13 +24,17 @@ def is_configured() -> bool:
     return not any(marker in combined for marker in _PLACEHOLDER_MARKERS)
 
 
-def chat(messages: list[dict]) -> str:
-    """调用 chat completion，返回首条回复文本。"""
+def chat(messages: list[dict], *, response_format: dict | None = None) -> str:
+    """调用 chat completion，返回首条回复文本。
+
+    response_format 透传给 OpenAI-compatible 端点（如 {"type": "json_object"} 开启 JSON 模式）；
+    缺省 None 时行为与原先完全一致。
+    """
     settings = get_settings()
-    resp = _client().chat.completions.create(
-        model=settings.chat_model,
-        messages=messages,
-    )
+    kwargs: dict = {"model": settings.chat_model, "messages": messages}
+    if response_format is not None:
+        kwargs["response_format"] = response_format
+    resp = _client().chat.completions.create(**kwargs)
     return resp.choices[0].message.content
 
 
