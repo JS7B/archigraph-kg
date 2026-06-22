@@ -102,21 +102,21 @@
 
 ### GraphRAG 检索与回答
 
-- [ ] 接入并封装 GraphRAG 检索流程。
-- [ ] 实现问题 embedding。
-- [ ] 实现 top-k chunk 召回。
-- [ ] 实现 entity neighborhood expansion。
-- [ ] 实现 graph path 收集。
-- [ ] 实现 rerank / filtering。
-- [ ] 实现 GraphRAG context builder。
-- [ ] 实现 answer generation。
-- [ ] 实现 citation and path packaging。
+- [x] 接入并封装 GraphRAG 检索流程。（app/qa pipeline，编排控制权在项目内）
+- [x] 实现问题 embedding。
+- [x] 实现 top-k chunk 召回。（复用 graph.search_chunks）
+- [x] 实现 entity neighborhood expansion。（MENTIONS→RELATES 扩 1 跳，手写 Cypher）
+- [x] 实现 graph path 收集。（RelationPath 带 evidence_chunk_id）
+- [x] 实现 rerank / filtering。
+- [x] 实现 GraphRAG context builder。（chunk 编 [n] 角标 ↔ Citation）
+- [x] 实现 answer generation。（LLM 带引用答案）
+- [x] 实现 citation and path packaging。（只留答案真实引用的角标 + /api/chunks 反查）
 
 验证：
 
-- [ ] 用户问题能得到带引用答案。
-- [ ] 答案能展示相关实体和关系路径。
-- [ ] 引用能回到原始 chunk。
+- [x] 用户问题能得到带引用答案。（POST /api/chat，真实 LLM gate 测试通过）
+- [x] 答案能展示相关实体和关系路径。（RelationPath 单列入上下文）
+- [x] 引用能回到原始 chunk。（Citation.chunk_id + /api/chunks/{id} 反查原文）
 
 ### Run 与事件流
 
@@ -137,18 +137,18 @@
 
 ### 前端工作台
 
-- [ ] 实现文档库。
-- [ ] 实现上传 / 导入入口。
-- [ ] 实现问答区。
-- [ ] 实现答案和引用区。
-- [ ] 实现图谱可视化。
-- [ ] 实现运行事件时间线。
-- [ ] 实现设置页。
+- [~] 实现文档库。（LibraryView mock 卡片+状态徽标+上传入口占位；待接真实 API）
+- [~] 实现上传 / 导入入口。（占位入口已placed；真实上传待后端文档 API）
+- [~] 实现问答区。（WorkbenchView 对话流 mock；待接 /api/chat）
+- [~] 实现答案和引用区。（CitationPanel 角标定位+chunkId 反查 mock；待接真实 Citation）
+- [~] 实现图谱可视化。（GraphView Cytoscape 渲染 mock 图+搜索+实体详情；待接图谱 API）
+- [~] 实现运行事件时间线。（RunEventTimeline mock；待接 SSE）
+- [ ] 实现设置页。（仍为占位）
 
 验证：
 
-- [ ] 用户可以在前端完成导入、索引、提问、查看引用和查看图谱。
-- [ ] 页面布局不拥挤，重点信息清晰。
+- [~] 用户可以在前端完成导入、索引、提问、查看引用和查看图谱。（界面用 mock 全部跑通；真实链路待接 API）
+- [x] 页面布局不拥挤，重点信息清晰。（布局 A + 精细化设计系统，build 通过）
 
 ### 像素 Agent 动画
 
@@ -216,3 +216,4 @@
 - 2026-06-17：「大脑 + 工人」多窗口并行首次完整跑通。后端 worktree（feat/backend）做文档解析与切块、前端 worktree（feat/frontend）做工作台脚手架，并行推进。大脑 review 发现并打回后端 PDF 同页重复段落的偏移 bug（违反偏移可追溯硬规则，测试未覆盖、靠读代码发现），后端修复并加回归测试（42→44 全过）。前端因基线落后于协作约定提交，先 `git merge main` 同步再合（避免误删 CLAUDE/AGENTS 协作约定）。两条经 review 后由大脑按「先后端后前端」顺序合入 main，全量回归通过。
 - 2026-06-18：复用 feat/backend worktree 完成「Neo4j 图谱与向量索引」（Document/Chunk + embedding + 向量检索；Entity/Relation 留给抽取板块）。新增 app/graph：schema（约束+向量索引+awaitIndexes 防 51N63）、writer（确定性 chunk_id 幂等 MERGE，保留 provenance）、embedding（批量同序）、search（原生向量索引召回带 score）；schema 初始化接入 lifespan（失败仅告警）；EMBEDDING_DIM 走配置。10 集成测试真连 Neo4j 且 test_ 前缀自清理不污染共享库，全量 54 passed。大脑 review 通过后合并。流程小插曲：工人首次「执行完毕」时忘 commit，提醒后补交（再次印证交接信号=本地 commit）。
 - 2026-06-18：复用 feat/backend 完成「实体识别与关系抽取」。新增 app/extraction：逐 chunk 调 LLM（JSON 模式，response_format 透传且向后兼容）抽实体/关系、文档内归一名+类型精确合并去重、写入 Entity/MENTIONS/RELATES。每关系带 evidence_chunk_id、Mention 精确到 chunk（引用可追溯）；业务关系统一 :RELATES 类型作属性（遵守决策边界）；关系两端解析不到即丢弃防脏边；单 chunk 失败跳过+指数退避重试；Entity 加唯一约束并强制带 document_id（保共享库清理）。真连 Neo4j+真实 LLM 测试，全量 76 passed（main 上真实 LLM 测试因未配 key 而 skip）。同步勾选上一板块遗留的「写入 Entity/Relation」。
+- 2026-06-18：双线并行收获两个板块。后端 feat/backend 完成「GraphRAG 检索与回答」：app/qa 编排 向量召回→rerank→实体邻域扩展(MENTIONS/RELATES 1跳)→上下文组装([n]角标↔Citation)→LLM 带引用答案，新增 /api/chat 与 /api/chunks/{id}，Answer/Citation 用 camelCase alias 对齐前端契约，只保留答案正文真实出现的角标，关系带 evidence_chunk_id，全量 94 passed。前端 feat/frontend 完成 P1/P2/P3：精细化 token 体系 + 7 个共享 UI 基件 + dev 预览页、工作台/文档库/图谱探索三视图(mock + Cytoscape)、引用面板角标点击滚动定位 + chunkId 反查，mock 严格对齐 src/types，typecheck/build 通过，像素小人保持 idle 待用户亲调。两条经大脑 review（含核查 todo.md 未被前端误改、前后端 Citation 契约已对齐）后按先后端后前端顺序合入 main。
