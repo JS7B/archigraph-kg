@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import cytoscape from 'cytoscape'
 import type { ElementDefinition } from 'cytoscape'
 import { Card, Chip, DataValue, Eyebrow, Panel } from '../../components/ui'
-import { mockGraph } from '../../mocks'
-import type { GraphEdge, GraphNode } from '../../types'
+import { ApiError } from '../../api/client'
+import { fetchGraph } from '../../api/graph'
+import type { GraphData, GraphEdge, GraphNode } from '../../types'
 import styles from './GraphView.module.css'
 
 interface NodeRelation {
@@ -12,22 +13,24 @@ interface NodeRelation {
   direction: 'outgoing' | 'incoming'
 }
 
-const graphElements: ElementDefinition[] = [
-  ...mockGraph.nodes.map((node) => ({
-    data: {
-      id: node.id,
-      label: node.label,
-    },
-  })),
-  ...mockGraph.edges.map((edge) => ({
-    data: {
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      label: edge.relationType,
-    },
-  })),
-]
+// 关系查找：接受 graphData 参数（替代旧的模块级 mockGraph 依赖）。
+function findGraphNode(graph: GraphData, nodeId: string): GraphNode | null {
+  return graph.nodes.find((node) => node.id === nodeId) ?? null
+}
+
+function getNodeRelations(graph: GraphData, nodeId: string): NodeRelation[] {
+  return graph.edges.reduce<NodeRelation[]>((relations, edge) => {
+    if (edge.source === nodeId) {
+      const otherNode = findGraphNode(graph, edge.target)
+      if (otherNode) relations.push({ edge, otherNode, direction: 'outgoing' })
+    }
+    if (edge.target === nodeId) {
+      const otherNode = findGraphNode(graph, edge.source)
+      if (otherNode) relations.push({ edge, otherNode, direction: 'incoming' })
+    }
+    return relations
+  }, [])
+}
 
 const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
   {
@@ -107,47 +110,53 @@ const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
   },
 ]
 
-function findGraphNode(nodeId: string) {
-  return mockGraph.nodes.find((node) => node.id === nodeId) ?? null
-}
-
-function getNodeRelations(nodeId: string): NodeRelation[] {
-  return mockGraph.edges.reduce<NodeRelation[]>((relations, edge) => {
-    if (edge.source === nodeId) {
-      const otherNode = findGraphNode(edge.target)
-
-      if (otherNode) {
-        relations.push({ edge, otherNode, direction: 'outgoing' })
-      }
-    }
-
-    if (edge.target === nodeId) {
-      const otherNode = findGraphNode(edge.source)
-
-      if (otherNode) {
-        relations.push({ edge, otherNode, direction: 'incoming' })
-      }
-    }
-
-    return relations
-  }, [])
-}
-
 export function GraphView() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const cyRef = useRef<cytoscape.Core | null>(null)
+  const [graphData, setGraphData] = useState<GraphData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
 
-  const selectedRelations = useMemo(
-    () => (selectedNode ? getNodeRelations(selectedNode.id) : []),
-    [selectedNode],
-  )
+  // 拉取全图（套 LibraryView 的 refresh + useEffect 模式，补自建 loading flag）。
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await fetchGraph()
+      setGraphData(data)
+      setLoadError(null)
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : '请求失败，请确认后端已启动'
+      setLoadError(msg)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    if (!containerRef.current) {
-      return
-    }
+    void refresh()
+  }, [refresh])
+
+  // Cytoscape elements 由 graphData 派生（数据到位才有图）。
+  const graphElements: ElementDefinition[] = useMemo(() => {
+    if (!graphData) return []
+    return [
+      ...graphData.nodes.map((node) => ({ data: { id: node.id, label: node.label } })),
+      ...graphData.edges.map((edge) => ({
+        data: { id: edge.id, source: edge.source, target: edge.target, label: edge.relationType },
+      })),
+    ]
+  }, [graphData])
+
+  const selectedRelations = useMemo(
+    () => (selectedNode && graphData ? getNodeRelations(graphData, selectedNode.id) : []),
+    [selectedNode, graphData],
+  )
+
+  // Cytoscape 实例：依赖 graphData，数据到位（或变化）后（重新）构建。
+  useEffect(() => {
+    if (!containerRef.current || !graphData) return
 
     const cy = cytoscape({
       container: containerRef.current,
@@ -170,27 +179,25 @@ export function GraphView() {
 
     cy.on('tap', 'node', (event) => {
       const nodeId = event.target.id()
-      setSelectedNode(findGraphNode(nodeId))
+      setSelectedNode(findGraphNode(graphData, nodeId))
     })
 
     cy.on('tap', (event) => {
-      if (event.target === cy) {
-        setSelectedNode(null)
-      }
+      if (event.target === cy) setSelectedNode(null)
     })
 
     return () => {
       cy.destroy()
       cyRef.current = null
     }
-  }, [])
+    // graphElements 由 graphData 派生，依赖 graphData 即可覆盖数据变化重建。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphData])
 
+  // 搜索高亮：仍在已渲染的 Cytoscape 实例上做前端 filter（体验好，不发请求）。
   useEffect(() => {
     const cy = cyRef.current
-
-    if (!cy) {
-      return
-    }
+    if (!cy) return
 
     const normalizedSearch = searchTerm.trim().toLocaleLowerCase()
     const nodes = cy.nodes()
@@ -199,9 +206,7 @@ export function GraphView() {
     nodes.removeClass('searchMatch searchDimmed')
     edges.removeClass('searchDimmed')
 
-    if (!normalizedSearch) {
-      return
-    }
+    if (!normalizedSearch) return
 
     const matchingNodes = nodes.filter((node) => {
       const label = String(node.data('label') ?? '').toLocaleLowerCase()
@@ -214,6 +219,8 @@ export function GraphView() {
     matchingNodes.connectedEdges().removeClass('searchDimmed')
   }, [searchTerm])
 
+  const isEmpty = !loading && !loadError && graphData && graphData.nodes.length === 0
+
   return (
     <section className={styles.graphView}>
       <header className={styles.header}>
@@ -221,7 +228,7 @@ export function GraphView() {
           <Eyebrow>Knowledge Graph</Eyebrow>
           <h1 className={styles.title}>图谱探索</h1>
           <p className={styles.subtitle}>
-            从 mock 图谱中探索实体与关系，后续会接入真实 Neo4j 查询与邻域扩展。
+            从知识库的实体与关系中探索，点击节点查看详情，输入名称高亮匹配。
           </p>
         </div>
 
@@ -242,8 +249,18 @@ export function GraphView() {
 
       <div className={styles.workspace}>
         <div className={styles.canvasShell} aria-label="知识图谱画布">
-          <div ref={containerRef} className={styles.canvas} />
-          <div className={styles.canvasNote}>拖拽移动画布，滚轮缩放，点击节点查看详情。</div>
+          {loading && <div className={styles.statusMsg}>加载图谱中…</div>}
+          {loadError && <div className={styles.statusMsg}>加载失败：{loadError}</div>}
+          {isEmpty && (
+            <div className={styles.statusMsg}>知识库还没有实体。上传文档并完成入库后，这里会显示实体与关系。</div>
+          )}
+          {/* 数据就绪才挂载 Cytoscape 容器，避免空容器闪烁 */}
+          {!loading && !loadError && graphData && graphData.nodes.length > 0 && (
+            <>
+              <div ref={containerRef} className={styles.canvas} />
+              <div className={styles.canvasNote}>拖拽移动画布，滚轮缩放，点击节点查看详情。</div>
+            </>
+          )}
         </div>
 
         <Panel className={styles.detailPanel} eyebrow="Entity Detail" title="实体详情">
@@ -274,7 +291,7 @@ export function GraphView() {
                     ))}
                   </ul>
                 ) : (
-                  <p className={styles.noRelations}>这个实体当前没有 mock 关系。</p>
+                  <p className={styles.noRelations}>这个实体当前没有关系。</p>
                 )}
               </section>
             </div>

@@ -1,0 +1,109 @@
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-5);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+
+.refreshBtn {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-body);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+}
+.refreshBtn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.refreshBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.errorMsg {
+  color: var(--color-error);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-error-soft);
+  border-radius: var(--radius);
+}
+
+.depGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+
+.depCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.depHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.depName {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.depDesc {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-snug);
+}
+
+.bodyText {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-base);
+  color: var(--color-text-body);
+  line-height: var(--leading-relaxed);
+}
+
+.configList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.steps {
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--text-base);
+  color: var(--color-text-body);
+  line-height: var(--leading-relaxed);
+}
+
+.steps li {
+  margin-bottom: var(--space-1);
+}

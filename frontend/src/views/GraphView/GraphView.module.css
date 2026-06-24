@@ -127,6 +127,20 @@
   inset: 0;
 }
 
+/* 加载中 / 加载失败 / 空图 状态文案（居中） */
+.statusMsg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+}
+
 .canvasNote {
   position: absolute;
   right: var(--space-4);

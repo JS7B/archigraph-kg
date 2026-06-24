@@ -303,3 +303,48 @@
     重构为 `.room`(flex 容器) > `.canvas`(固定 220 高，承载场景) + `.status`(正常流)，
     data-stage 挂在 `.canvas` 上（场景元素都在其内）。教训：容器职责要单一——`.room` 管面板
     外观，`.canvas` 管画布定位，分开才不互相干扰。
+
+## 2026-06-24 真实 API 接入收尾（GraphView + SettingsView）
+
+- 做了什么：把仍在用 mock/占位的两块接到真实后端——GraphView 接 `/api/graph/*`、
+  SettingsView 实现（接 `/health/deps`）。新建 api 领域层（graph.ts + health.ts）做后端调用
+  + 字段映射收口。AgentRoom 道具遮挡复查确认上轮已修、本轮无需改动。
+
+- 这是什么：
+  - **api 领域层**：把"调后端 + 字段映射"收口在 `src/api/` 下的领域文件里
+    （graph.ts/health.ts），View 层只认前端类型（GraphData 等），不关心后端字段名。
+    这与现有 api 层（按传输机制分 client/sse）风格略不同（更按领域），但对字段
+    不一致的 GraphView 改造更干净。
+  - **字段映射**：后端 graph 路由返回的 `{nodes:{id,name,type}, edges:{source,target,type}}`
+    与前端 `types/graph.ts` 的 `{id,label,entityType}/{id,source,target,relationType}` 字段
+    名不一致。映射在 graph.ts 里做（name→label、type→entityType/relationType），后端 edge
+    无 id 则用 source-target-type 生成。View 层完全不感知这层差异。
+
+- 为什么需要：前端大部分已接真实 API（文档库/问答/引用/事件流），但 GraphView 还在用
+  mockGraph 硬编码、SettingsView 还是占位。这两块接通后，整个工作台才端到端真跑通——
+  上传文档能看真实图谱、设置页能看依赖状态。
+
+- 为什么这么做：
+  - **GraphView 三态（loading/error/空图）都处理**：学了 LibraryView 的 refresh+useEffect
+    模式，但补了它缺的 loading flag（LibraryView 首次渲染 documents=[] 会误显示"空列表"，
+    GraphView 拉图谱慢，必须区分"加载中"和"真空图"）。Cytoscape 容器只在数据就绪后渲染，
+    避免空容器闪烁。
+  - **Cytoscape init useEffect 依赖改 [graphData]**：原来是 `[]`（挂载一次、用静态 mock）。
+    改成依赖 graphData 后，数据到位才建实例、数据变了会重建（destroy 旧的建新的）。
+    没用 cy.add/remove 增量更新——简单优先，全量重建对 limit=100 的样本规模无性能问题。
+  - **搜索仍走前端 filter**：不调 /api/graph/search API。因为搜索是在已渲染的 Cytoscape
+    实例上做 label 高亮，体验即时；调 API 反而慢且要重建图。search API 留给未来"跨页搜索"
+    场景。这是"用对的工具"——搜索 API 适合返回列表的场景，不适合图谱高亮。
+  - **字段映射放 api 层而非 View**：如果放 View，GraphView 会混入后端字段名，且
+    findGraphNode/getNodeRelations 也要处理两种字段。收口在 graph.ts，View 和本地函数
+    都只认 GraphData，干净且可测。
+
+- 踩了什么坑：
+  - **后端 edge 无 id，前端需 id**：Cytoscape 的 element 和 React 的 key 都需要唯一 id，
+    但后端 RELATES 边只返回 {source,target,type}。用 `${source}-${target}-${type}` 生成
+    稳定 id（同一关系多次拉取 id 一致，不破坏 React reconciliation）。教训：跨端字段
+    不只是"名字不同"，还可能"有缺"，映射层要兜底补全。
+  - **CSS Module 里 `:global(code)` 影响范围过大**：SettingsView 初版想给 `<code>` 加背景
+    样式，写了 `:global(code){...}`——这会让全 app 的 code 都加背景，污染其他视图。
+    发现后删掉，改用全局已有的等宽字体（global.css 里 code 只设了 font-family）。
+    教训：CSS Module 的 `:global` 是逃生舱，慎用——它穿透作用域，影响全局。
