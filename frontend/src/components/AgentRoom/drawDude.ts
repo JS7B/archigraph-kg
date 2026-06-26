@@ -9,48 +9,46 @@
  * - 用 pattern 数组做单一数据源：改图案/配色只改下面的 PATTERN/COLOR（易读），
  *   box-shadow 字符串由 compile() 自动生成（运行一次，结果存常量）。
  *
- * 画法以 ZCodeRoom 原型 drawDude() 为基准（紫发/肤/腿/鞋），
- * 本项目差异：卫衣改蓝靛紫主色（呼应 --color-accent）+ 加方框眼镜（档案员人设）。
+ * 配色取向（v3 场景叙事版）：小人不是主体，工作台才是；但小人作为深紫房间里的
+ * 视觉锚点，用多彩配色（橙卫衣 + 粉高光）让它跳出来，不沉闷、不与主区撞色。
+ * 小人本体只悬浮，不做手臂逐帧——动作由横向飘移到家具工位 + 家具自身运转表达。
  */
 
-// 配色（对齐 ZCodeRoom COL，身体改本项目蓝靛紫）。
-// 字符 → CSS 色：改色只改这里。
+// 配色（多彩活泼，对齐 tokens.css 的 --dude-* 变量）。
+// 字符 → CSS 色：改色改 tokens.css，这里只映射到变量。
 const COLOR: Record<string, string> = {
-  h: '#5e4f8e', // 头发（紫）
-  s: '#ffd9a8', // 肤色
-  e: '#222222', // 眼睛/瞳
-  g: '#2a2540', // 眼镜框（深紫黑，档案员辨识特征）
-  b: '#5b6ee1', // 卫衣主色（蓝靛紫，呼应 --color-accent）
-  B: '#6ec3ff', // 卫衣暗部/高光（亮蓝）
-  l: '#2a2540', // 腿
+  h: 'var(--dude-hair)',  // 头发（紫）
+  s: 'var(--dude-skin)',  // 肤色
+  e: 'var(--dude-eye)',   // 眼睛/瞳
+  g: 'var(--dude-glass)', // 眼镜框（档案员辨识特征）
+  b: 'var(--dude-body)',  // 卫衣主色（橙，焦点色）
+  B: 'var(--dude-body-hi)', // 卫衣高光（粉，体积感）
+  l: 'var(--dude-leg)',   // 腿
 }
 
 // 8列×8行 像素图案。字符：. 透明 | 其余见 COLOR。
 // 第4行 .gseseg. —— g 眼镜框框住 e 眼睛（左 g-s-e-s-e-g 右）。
+// 第6行 .bbBBbb. —— B 高光放在右侧两列，造体积。
 const PATTERN: string[] = [
+  '...hh...',
   '..hhhh..',
-  '.hhhhhh.',
-  '.hssssh.', // 额发 + 脸
-  '.gseseg.', // 眼镜框 + 眼（g 框住 e）
-  '..ssss..', // 脸下半（鼻嘴留白）
-  '.bbBBbb.', // 卫衣（右半 B 暗部，造体积）
-  '.bbBBbb.',
-  '.ll..ll.', // 腿（悬浮，短腿）
+  '..hsssh.', // 额发 + 脸
+  '..gsesg.', // 眼镜框 + 眼（g 框住 e）
+  '..sssss.', // 脸下半
+  '..bbBBb.', // 卫衣（右半 B 高光造体积）
+  '..bbbbb.',
+  '..ll.ll.', // 腿（悬浮，短腿）
 ]
 
-// 每格像素尺寸：宽 4 × 高 4.5 → 整体约 32×36。
-export const DUDE_W = 32
-export const DUDE_H = 36
-const GRID_W = 4
-const GRID_H = 4.5
+// 每格像素尺寸：宽 3 × 高 3 → 整体约 24×24。
+export const DUDE_W = 24
+export const DUDE_H = 24
+const GRID_W = 3
+const GRID_H = 3
 
 /**
  * 把 pattern 编译成 box-shadow 字符串。
  * 每个非透明格变成一个 "{x}px {y}px 0 0 {color}" 投影（spread 0、模糊 0 = 硬边像素）。
- *
- * 注意：box-shadow 相对元素自身定位，第一格（0,0）的色块用元素 background 画最省，
- * 其余用 box-shadow 偏移。这里统一用 box-shadow（background 留给伪元素或保持透明），
- * 为的是眨眼等"换色"场景只改 boxShadow 字符串即可。
  */
 function compile(pattern: string[], color: Record<string, string>, gw: number, gh: number): string {
   const shadows: string[] = []
@@ -60,7 +58,6 @@ function compile(pattern: string[], color: Record<string, string>, gw: number, g
       const ch = rowChars[x]
       const c = color[ch]
       if (!c) continue
-      // box-shadow 坐标：向右偏移 x*gw，向下偏移 y*gh。
       shadows.push(`${(x * gw).toFixed(2)}px ${(y * gh).toFixed(2)}px 0 0 ${c}`)
     }
   })

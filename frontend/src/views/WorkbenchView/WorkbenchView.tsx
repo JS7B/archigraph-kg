@@ -88,8 +88,6 @@ export function WorkbenchView() {
         <AgentRoom
           className={styles.stagePanel}
           stage={currentStage}
-          events={events}
-          devControls={import.meta.env.DEV}
         />
         <Panel className={styles.timelinePanel} eyebrow="Run Events" title="运行轨迹">
           <RunEventTimeline events={events} />

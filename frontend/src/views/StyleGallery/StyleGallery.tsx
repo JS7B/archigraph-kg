@@ -165,7 +165,8 @@ export function StyleGallery() {
       {/* AgentRoom — 12 状态全览 */}
       <Section eyebrow="Signature" title="像素档案员 · 12 状态">
         <p className={styles.cardText}>
-          深紫调像素小房间：极简悬浮色块小人 + 头顶气泡 + 周围场景道具。
+          深紫调像素小房间：极简悬浮小人按状态横向飘到对应家具工位前，动作由家具自身运转
+          （打印机吐纸 / 咖啡冒热气 / 档案柜开抽屉 / 碎纸机吞纸）表达。
           每个状态由真实 <code>RunEvent.stage</code> 驱动，下方网格展示全部 12 个状态。
         </p>
         <div className={styles.agentGrid}>
