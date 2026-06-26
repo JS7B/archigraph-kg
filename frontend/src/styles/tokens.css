@@ -55,11 +55,16 @@
   --room-accent: #c19eff;        /* 房间强调（紫，亮于 --color-accent 适配深底） */
   --room-text: #f0e9ff;          /* 房间内文字 */
   --room-dim: #9a8fc4;           /* 房间内次要文字 */
-  /* 小人配色（对齐 ZCodeRoom，卫衣走蓝靛紫） */
+  --room-green: #7fd1a0;         /* 房间绿（指示灯/完成辉光） */
+  --room-cyan: #6ec3ff;          /* 房间青（扫描线/连线/放大镜） */
+  /* 小人配色（场景叙事版：多彩活泼，让小人在深紫房间跳成焦点）
+     橙卫衣主色 + 粉高光造体积，不再与主区靛紫撞色变沉闷。 */
   --dude-skin: #ffd9a8;
   --dude-hair: #5e4f8e;
-  --dude-body: #5b6ee1;          /* 卫衣主色，呼应 --color-accent */
-  --dude-body-hi: #6ec3ff;       /* 卫衣高光/暗部 */
+  --dude-eye: #222222;
+  --dude-glass: #2a2540;         /* 眼镜框（档案员辨识特征） */
+  --dude-body: #ffb347;          /* 卫衣主色（橙，焦点色） */
+  --dude-body-hi: #ff6b9d;       /* 卫衣高光（粉，体积感） */
   --dude-leg: #2a2540;
   /* 道具配色 */
   --prop-doc: #fef9e7;           /* 文档纸色 */

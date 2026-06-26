@@ -1,141 +1,8 @@
 /* ────────────────────────────────────────────────────────────
-   AgentRoom · 深紫调像素房间（极简悬浮小人 + 场景道具叙事）
-   本文件：房间背景/地面/常驻场景/小人静态/气泡/状态栏。
-   各 stage 的道具显隐与动效在 roomScenes.css（全局 [data-stage]）。
+   AgentRoom · 深紫调像素房间（场景叙事版）
+   本文件：房间容器/背景/地面/常驻家具(5工位)/小人静态/状态栏。
+   各 stage 的道具运转 + 小人横向飘移在 roomScenes.css（全局 [data-stage]）。
    ──────────────────────────────────────────────────────────── */
-
-/* 小人本体：单 div + box-shadow 画全部像素（见 drawDude.ts）。
-   box-shadow 由编译器生成，这里只管定位/动画/尺寸。 */
-.dude {
-  position: absolute;
-  left: 50%;
-  bottom: 54px;
-  width: 4px;          /* box-shadow 相对此点偏移，div 本体只需 1 格大小作锚 */
-  height: 4.5px;
-  margin-left: -2px;
-  z-index: 4;
-  animation: ar-bob 2.4s ease-in-out infinite;
-}
-
-/* 影子：地面上一团椭圆，随悬浮缩放（强化"飘着"的感觉） */
-.dudeShadow {
-  position: absolute;
-  left: 50%;
-  bottom: 50px;
-  transform: translateX(-50%);
-  width: 30px;
-  height: 7px;
-  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.45), transparent 70%);
-  z-index: 3;
-  animation: ar-shadow-pulse 2.4s ease-in-out infinite;
-}
-
-/* 头顶气泡：状态最直观表达（emoji 图标） */
-.bubble {
-  position: absolute;
-  left: 50%;
-  bottom: 100px;
-  transform: translateX(-50%);
-  min-width: 24px;
-  height: 24px;
-  padding: 0 5px;
-  background: var(--room-bg);
-  border: 2px solid var(--room-accent);
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  z-index: 7;
-  animation: ar-bubble-float 1.8s ease-in-out infinite;
-}
-.bubble::after {
-  content: "";
-  position: absolute;
-  bottom: -6px;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 5px solid transparent;
-  border-top-color: var(--room-accent);
-}
-
-/* ── 常驻场景元素（修已知问题3：房间加固定道具，让小人有"家"）── */
-
-/* 桌子：小人脚下的工作台 */
-.desk {
-  position: absolute;
-  left: 50%;
-  bottom: 44px;
-  transform: translateX(-50%);
-  width: 140px;
-  height: 8px;
-  background: linear-gradient(180deg, #6b4f3a, #4a3624);
-  border: 2px solid #2a1e0f;
-  border-radius: 2px;
-  z-index: 2;
-}
-
-/* 显示器：桌上后方，营造工作间 */
-.monitor {
-  position: absolute;
-  bottom: 52px;
-  width: 30px;
-  height: 22px;
-  background: var(--room-bg);
-  border: 2px solid var(--room-line-2);
-  border-radius: 2px;
-  z-index: 2;
-}
-.monitor::after {
-  content: "";
-  position: absolute;
-  inset: 3px;
-  background: linear-gradient(180deg, #6ec3ff, #c19eff);
-  animation: ar-screen 2.2s ease-in-out infinite;
-}
-.monitorL { left: 18px; }
-.monitorR { right: 18px; }
-
-/* 门：右侧小人出入口（暗示来源/去向） */
-.door {
-  position: absolute;
-  right: 6px;
-  bottom: 44px;
-  width: 22px;
-  height: 40px;
-  background: linear-gradient(180deg, #4a3624, #2a1e0f);
-  border: 2px solid #1a120a;
-  border-radius: 4px 4px 0 0;
-  z-index: 2;
-}
-.door::after {
-  content: "";
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  width: 3px;
-  height: 3px;
-  background: var(--room-accent);
-  border-radius: 50%;
-}
-
-/* 门牌：工作区/任务名 */
-.plate {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(108, 92, 231, 0.18);
-  border: 1px solid var(--room-accent);
-  color: var(--room-accent);
-  font-size: 10px;
-  padding: 2px 10px;
-  border-radius: 5px;
-  white-space: nowrap;
-  max-width: 90%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  z-index: 6;
-}
 
 /* ── 房间容器（自带面板外观：圆角边框 + 阴影），垂直 flex ── */
 .room {
@@ -148,7 +15,7 @@
   box-shadow: var(--shadow-md);
 }
 
-/* 画布：固定高度，承载所有场景元素（地面/小人/道具），relative 定位锚 */
+/* 画布：固定高度，承载所有场景元素，relative 定位锚 */
 .canvas {
   position: relative;
   height: 220px;
@@ -157,7 +24,285 @@
   image-rendering: pixelated;
 }
 
-/* 地面：像素条纹 */
+/* ── 常驻家具带（5 个工位，横向排开；DOM 常驻，z-index 2 低于小人 4）──
+   工位用途：
+     电脑桌+显示器 (左)  → idle/writing/checking
+     咖啡角            → idle 喝咖啡
+     打印机           (中) → uploading/parsing/extracting/linking
+     档案柜           (中右) → indexing/searching
+     销毁台           (右) → deleting/rebuilding  */
+
+/* 电脑桌（左）*/
+.desk {
+  position: absolute;
+  bottom: 56px;
+  left: 12px;
+  width: 64px;
+  height: 6px;
+  background: linear-gradient(180deg, #6b4f3a, #4a3624);
+  border: 1px solid #2a1e0f;
+  border-radius: 1px;
+  z-index: 2;
+}
+.monitor {
+  position: absolute;
+  bottom: 62px;
+  left: 22px;
+  width: 30px;
+  height: 22px;
+  background: #0d0a16;
+  border: 2px solid var(--room-line-2);
+  border-radius: 2px;
+  z-index: 2;
+}
+.monitor::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: linear-gradient(180deg, #6ec3ff, #c19eff);
+  animation: ar-screen 2.4s ease-in-out infinite;
+}
+@keyframes ar-screen {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.95; }
+}
+/* writing/checking：屏幕显示滚动文字行（覆盖默认亮屏渐变）*/
+.canvas[data-stage="writing"] .monitor::after,
+.canvas[data-stage="checking"] .monitor::after {
+  background:
+    repeating-linear-gradient(180deg, rgba(110, 195, 255, 0.6) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #0a1424, #0a1424);
+  animation: ar-typelines 0.8s linear infinite;
+}
+@keyframes ar-typelines {
+  0% { background-position: 0 0, 0 0; }
+  100% { background-position: 0 4px, 0 0; }
+}
+
+/* 咖啡角（紧邻电脑桌右侧）—— 小一号（v3 反馈：咖啡杯再小一点）*/
+.coffee {
+  position: absolute;
+  bottom: 62px;
+  left: 84px;
+  width: 10px;
+  height: 9px;
+  z-index: 2;
+}
+/* 杯身（梯形）*/
+.coffee::before {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 10px;
+  height: 7px;
+  background: var(--dude-body);
+  border: 1px solid #2a1e0f;
+  clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%);
+}
+/* 杯把手 */
+.coffee::after {
+  content: "";
+  position: absolute;
+  right: -3px;
+  top: 1px;
+  width: 4px;
+  height: 4px;
+  border: 2px solid var(--dude-body);
+  border-radius: 50%;
+  background: transparent;
+}
+/* 咖啡热气：3 股错峰常驻上升（氛围感，与 idle 喝咖啡动作呼应）*/
+.steam {
+  position: absolute;
+  left: 86px;
+  bottom: 73px;
+  z-index: 2;
+  pointer-events: none;
+}
+.steam i {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--room-dim);
+  opacity: 0;
+  animation: ar-steam 1.8s ease-out infinite;
+}
+.steam i:nth-child(1) { left: 0; animation-delay: 0s; }
+.steam i:nth-child(2) { left: 3px; animation-delay: 0.5s; }
+.steam i:nth-child(3) { left: 6px; animation-delay: 1s; }
+@keyframes ar-steam {
+  0% { opacity: 0; transform: translateY(0); }
+  30% { opacity: 0.7; }
+  100% { opacity: 0; transform: translateY(-14px); }
+}
+
+/* 打印机/处理台（中）*/
+.printer {
+  position: absolute;
+  bottom: 56px;
+  left: 150px;
+  width: 44px;
+  height: 30px;
+  background: #5a6080;
+  border: 1px solid var(--room-line);
+  border-radius: 2px;
+  z-index: 2;
+}
+/* 出纸口 */
+.printer::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  width: 32px;
+  height: 3px;
+  background: #0d0a16;
+  border-radius: 1px;
+}
+/* 顶部指示灯（常驻闪烁）*/
+.printer::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 5px;
+  width: 4px;
+  height: 4px;
+  background: var(--room-green);
+  border-radius: 50%;
+  box-shadow: 0 0 4px var(--room-green);
+  animation: ar-blink 1s infinite;
+}
+@keyframes ar-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* 档案柜（中右）*/
+.cabinet {
+  position: absolute;
+  bottom: 56px;
+  right: 70px;
+  width: 30px;
+  height: 42px;
+  background: #5a6080;
+  border: 1px solid var(--room-line);
+  border-radius: 2px;
+  z-index: 2;
+}
+.cabinet::before,
+.cabinet::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  width: 24px;
+  height: 10px;
+  background: #8b93b5;
+  border-radius: 1px;
+}
+.cabinet::before { top: 4px; animation: ar-drawer 1.2s ease-in-out infinite; }
+.cabinet::after { top: 18px; animation: ar-drawer 1.2s ease-in-out 0.3s infinite; }
+@keyframes ar-drawer {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(6px); }
+}
+
+/* 销毁台（右，碎纸机造型；rebuilding 复用同位置作复印机视觉）*/
+.shredder {
+  position: absolute;
+  bottom: 56px;
+  right: 14px;
+  width: 34px;
+  height: 22px;
+  background: #5a6080;
+  border: 1px solid var(--room-line);
+  border-radius: 2px;
+  z-index: 2;
+}
+.shredder::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 3px;
+  background: #0d0a16;
+  border-radius: 1px;
+}
+
+/* 门牌：工作区/任务名 */
+.plate {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 179, 71, 0.18);
+  border: 1px solid var(--dude-body);
+  color: var(--dude-body);
+  font-size: 10px;
+  padding: 2px 10px;
+  border-radius: 5px;
+  white-space: nowrap;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 6;
+}
+
+/* 道具层容器：DOM 常驻，单个道具样式在 roomScenes.css（全局，按 data-stage 显隐） */
+.props {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* ── 像素小人（box-shadow 由 drawDude.ts 注入，z4 绝对焦点）──
+   小人本体只悬浮；left/bottom 由 roomScenes.css 按 [data-stage] 横向飘移。
+   这里只管尺寸/定位基准/悬浮动画。 */
+.dude {
+  position: absolute;
+  bottom: 66px;
+  left: 16%;
+  width: 4px;
+  height: 4px;
+  margin-left: -12px;
+  z-index: 4;
+  transition: left 0.8s var(--ease-in-out), bottom 0.8s var(--ease-in-out);
+  animation: ar-bob 0.6s ease-in-out infinite;
+}
+
+/* 影子：地面上一团椭圆，随悬浮缩放（强化"飘着"的感觉）。
+   left 由 roomScenes.css 与小人同步漂移。 */
+.dudeShadow {
+  position: absolute;
+  bottom: 52px;
+  left: 16%;
+  width: 26px;
+  height: 5px;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.45), transparent 70%);
+  z-index: 3;
+  transition: left 0.8s var(--ease-in-out);
+}
+
+/* 工作时（data-busy=1）：小人摆动更明显（带轻微旋转，不做手臂）*/
+.canvas[data-busy="1"] .dude {
+  animation: ar-bob-busy 0.6s ease-in-out infinite alternate;
+}
+
+/* error 红光层（按 data-stage 显隐，见 roomScenes.css 触发）*/
+.pErr {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 60%, rgba(248, 113, 113, 0.22), transparent 60%);
+}
+
+/* 地面：像素条纹 + 扫描线 */
 .ground {
   position: absolute;
   left: 0;
@@ -166,17 +311,25 @@
   height: 44px;
   background: repeating-linear-gradient(90deg, var(--room-ground) 0 14px, var(--room-ground-2) 14px 28px);
   border-top: 2px solid var(--room-line);
+  z-index: 1;
 }
-
-/* 道具层容器：DOM 常驻，单个道具样式在 roomScenes.css（全局，按 data-stage 显隐） */
-.props {
+.ground::after {
+  content: "";
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 5;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--room-cyan), transparent);
+  opacity: 0.3;
+  animation: ar-scan 3s linear infinite;
+}
+@keyframes ar-scan {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
-/* ── 状态栏（房间下方：标签 + 进度文案 + 运行轨迹）── */
+/* ── 状态栏（房间下方：标签 + 进度文案）── */
 .status {
   padding: 10px 14px;
   border-top: 1px solid var(--room-line);
@@ -191,57 +344,16 @@
 }
 .statusDetail {
   font-size: 11px;
-  color: var(--room-dim);
+  color: var(--room-text);
   margin-left: auto;
 }
 
-/* ── dev 控件（仅开发预览，生产 tree-shake）── */
-.devControls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 8px 14px;
-  border-top: 1px solid var(--room-line);
-}
-.devBtn,
-.devBtnActive {
-  font-size: 11px;
-  padding: 4px 8px;
-  border: 1px solid var(--room-line);
-  background: var(--room-top);
-  color: var(--room-text);
-  border-radius: 5px;
-  cursor: pointer;
-}
-.devBtnActive {
-  background: var(--room-accent);
-  border-color: var(--room-accent);
-  color: #fff;
-}
-
-/* ═══ keyframes（小人悬浮/影子/气泡/屏幕，全状态通用）═══ */
+/* ═══ keyframes（小人悬浮，全状态通用）═══ */
 @keyframes ar-bob {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-@keyframes ar-shadow-pulse {
-  0%, 100% { width: 30px; opacity: 0.6; }
-  50% { width: 22px; opacity: 0.4; }
-}
-@keyframes ar-bubble-float {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50% { transform: translateX(-50%) translateY(-3px); }
-}
-@keyframes ar-screen {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
-
-/* 工作时（data-busy=1）：小人摆动更明显（带轻微旋转） */
-.canvas[data-busy="1"] .dude {
-  animation: ar-bob-busy 1s ease-in-out infinite;
+  50% { transform: translateY(-3px); }
 }
 @keyframes ar-bob-busy {
-  0%, 100% { transform: translateY(0) rotate(-3deg); }
-  50% { transform: translateY(-3px) rotate(3deg); }
+  0% { transform: translateY(0) rotate(-2deg); }
+  100% { transform: translateY(-3px) rotate(2deg); }
 }
