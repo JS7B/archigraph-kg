@@ -259,32 +259,28 @@
 }
 
 /* ── 像素小人（box-shadow 由 drawDude.ts 注入，z4 绝对焦点）──
-   小人本体只悬浮；left/bottom 由 roomScenes.css 按 [data-stage] 横向飘移。
-   这里只管尺寸/定位基准/悬浮动画。 */
+   小人本体只悬浮；left 由 useAgentPosition 的 rAF 插值驱动（中断即转），
+   初值由 inline style 给。这里只管尺寸/定位基准/悬浮动画。 */
 .dude {
   position: absolute;
   bottom: 66px;
-  left: 16%;
   width: 4px;
   height: 4px;
   margin-left: -12px;
   z-index: 4;
-  transition: left 0.8s var(--ease-in-out), bottom 0.8s var(--ease-in-out);
   animation: ar-bob 0.6s ease-in-out infinite;
 }
 
 /* 影子：地面上一团椭圆，随悬浮缩放（强化"飘着"的感觉）。
-   left 由 roomScenes.css 与小人同步漂移。 */
+   left 由 useAgentPosition 与小人同步插值，初值由 inline style 给。 */
 .dudeShadow {
   position: absolute;
   bottom: 52px;
-  left: 16%;
   width: 26px;
   height: 5px;
   transform: translateX(-50%);
   background: radial-gradient(ellipse, rgba(0, 0, 0, 0.45), transparent 70%);
   z-index: 3;
-  transition: left 0.8s var(--ease-in-out);
 }
 
 /* 工作时（data-busy=1）：小人摆动更明显（带轻微旋转，不做手臂）*/

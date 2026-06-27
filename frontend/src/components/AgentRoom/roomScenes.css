@@ -1,52 +1,13 @@
 /* ────────────────────────────────────────────────────────────
-   AgentRoom · 场景叙事：道具运转 + 小人横向飘移（全局 CSS，非 module）
+   AgentRoom · 场景叙事：道具运转（全局 CSS，非 module）
    ────────────────────────────────────────────────────────────
-   机制：小人按 [data-stage] 横向飘到对应家具工位前；动作由家具自身运转表达。
-   选择器分两类：
-     1) [data-stage="x"] .dude / .dudeShadow —— 飘移目的地（left 坐标）
-     2) [data-stage="x"] .p-xxx              —— 激活对应道具动画
+   机制：小人位置由 useAgentPosition 的 rAF 逐帧插值驱动（中断即转，
+        不在此文件控制 left）。本文件只管：① 道具按 [data-stage] 显隐/运转；
+        ② error 状态小人抖动（覆盖 bob 动画）。
    道具 DOM 常驻（AgentRoom.tsx 里写死全局 class 名，不经 styles hash）。
    ──────────────────────────────────────────────────────────── */
 
-/* ═══ 第一类：小人横向飘移（连续补间平移，0.8s 缓动）═══
-   idle 在电脑前↔咖啡杯循环（喝咖啡）；其余状态飘到对应工位固定。 */
-.canvas[data-stage="idle"]      .dude,
-.canvas[data-stage="idle"]      .dudeShadow { left: 16%; }
-.canvas[data-stage="uploading"] .dude,
-.canvas[data-stage="uploading"] .dudeShadow { left: 50%; }
-.canvas[data-stage="parsing"]   .dude,
-.canvas[data-stage="parsing"]   .dudeShadow { left: 50%; }
-.canvas[data-stage="extracting"] .dude,
-.canvas[data-stage="extracting"] .dudeShadow { left: 50%; }
-.canvas[data-stage="linking"]   .dude,
-.canvas[data-stage="linking"]   .dudeShadow { left: 48%; }
-.canvas[data-stage="indexing"]  .dude,
-.canvas[data-stage="indexing"]  .dudeShadow { left: 74%; }
-.canvas[data-stage="searching"] .dude,
-.canvas[data-stage="searching"] .dudeShadow { left: 74%; }
-.canvas[data-stage="writing"]   .dude,
-.canvas[data-stage="writing"]   .dudeShadow { left: 14%; }
-.canvas[data-stage="checking"]  .dude,
-.canvas[data-stage="checking"]  .dudeShadow { left: 14%; }
-.canvas[data-stage="deleting"]  .dude,
-.canvas[data-stage="deleting"]  .dudeShadow { left: 86%; }
-.canvas[data-stage="rebuilding"] .dude,
-.canvas[data-stage="rebuilding"] .dudeShadow { left: 86%; }
-.canvas[data-stage="error"]     .dude,
-.canvas[data-stage="error"]     .dudeShadow { left: 50%; }
-
-/* idle 特殊：在电脑前 ↔ 咖啡杯之间循环飘（喝咖啡），用 keyframes 接管 left/bottom。
-   "人凑过去低头喝"而非"手举杯"——绕过手臂但动作读得出。 */
-.canvas[data-stage="idle"] .dude {
-  animation: ar-bob 0.6s ease-in-out infinite, ar-idle-coffee 7s ease-in-out infinite;
-}
-@keyframes ar-idle-coffee {
-  0%, 45% { left: 16%; bottom: 66px; }    /* 大部分时间在电脑前 */
-  55%, 70% { left: 28%; bottom: 60px; }   /* 飘到咖啡杯上方，略低=凑近喝 */
-  80%, 100% { left: 16%; bottom: 66px; }  /* 飘回电脑前 */
-}
-
-/* ═══ 第二类：道具运转（按 data-stage 激活）═══ */
+/* ═══ 道具运转（按 data-stage 激活）═══ */
 
 /* 道具基础：默认隐藏，按 stage 显示。单个道具的定位/外观在各自 .p-xxx 里。 */
 .prop {

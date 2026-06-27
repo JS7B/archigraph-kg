@@ -1,6 +1,7 @@
 import type { Stage } from '../../types'
 import { sceneMap } from './sceneMap'
 import { DUDE_SHADOW } from './drawDude'
+import { useAgentPosition } from './useAgentPosition'
 import styles from './AgentRoom.module.css'
 import './roomScenes.css'
 
@@ -26,6 +27,9 @@ interface AgentRoomProps {
 export function AgentRoom({ stage, className }: AgentRoomProps) {
   const cfg = sceneMap[stage]
   const rootClass = [styles.room, className ?? ''].filter(Boolean).join(' ')
+  // 小人位置由 rAF 逐帧插值驱动（中断即转），见 useAgentPosition.ts。
+  // left 初值取本 stage 目标，避免首帧从默认值跳变。
+  const { dudeRef, shadowRef } = useAgentPosition(stage)
 
   return (
     <div className={rootClass}>
@@ -68,9 +72,14 @@ export function AgentRoom({ stage, className }: AgentRoomProps) {
         </div>
 
         {/* 小人：1 个 div + box-shadow 画全部像素（见 drawDude.ts）。
-            left/bottom 由 roomScenes.css 按 [data-stage] 驱动（横向飘移）。 */}
-        <div className={styles.dudeShadow} />
-        <div className={styles.dude} style={{ boxShadow: DUDE_SHADOW }} />
+            left 由 useAgentPosition 的 rAF 插值驱动（中断即转），inline left 是初值。
+            bottom 固定，bob 悬浮动画由 AgentRoom.module.css 负责。 */}
+        <div className={styles.dudeShadow} ref={shadowRef} style={{ left: '16%' }} />
+        <div
+          className={styles.dude}
+          ref={dudeRef}
+          style={{ boxShadow: DUDE_SHADOW, left: '16%' }}
+        />
 
         {/* error：红光（按 data-stage 显隐）*/}
         <div className={styles.pErr} />
