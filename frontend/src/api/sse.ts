@@ -9,6 +9,11 @@ import { BASE_URL } from './client'
  * 不留僵尸连接（不关闭会一直挂着，泄漏连接数）。
  *
  * 本轮简单优先：不做断线重连 + /events 历史补全，EventSource 自带重连够用。
+ *
+ * ⚠️ X-API-Key 鉴权限制（配合后端 B2）：浏览器原生 EventSource 不支持自定义 header，
+ *    故 SSE 这层无法带 X-API-Key。开发模式（后端 API_KEY 为空）自动放行，无影响；
+ *    若生产环境配置了 API_KEY，需改用 fetch-based SSE（ReadableStream）重写本订阅，
+ *    或后端为 /events/stream 开查询参数 / 放行白名单。当前未配置 API_KEY 故保持简单。
  */
 
 const TERMINAL_STATUSES: ReadonlySet<RunEventStatus> = new Set(['succeeded', 'failed'])
@@ -54,7 +59,8 @@ export function subscribeRunEvents(
       status,
       message: typeof obj.message === 'string' ? obj.message : '',
       answer: (obj.answer as RunEvent['answer']) ?? null,
-      timestamp_ms: typeof obj.timestamp_ms === 'number' ? obj.timestamp_ms : Date.now(),
+      // 后端 B8：timestamp_ms 已加 alias="timestampMs"，输出 camelCase。
+      timestampMs: typeof obj.timestampMs === 'number' ? obj.timestampMs : Date.now(),
     }
 
     onEvent(event)

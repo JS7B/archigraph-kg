@@ -21,12 +21,12 @@ export type RunEventStatus = 'running' | 'succeeded' | 'failed'
 
 // 后端推送的单条运行事件。字段名严格对齐后端 by_alias 输出（详见规格 §契约对齐）。
 // - 终态成功事件 stage='idle' + status='succeeded'，判终态用 status 而非 stage。
-// - timestamp_ms：后端无 alias，输出即下划线名。
+// - timestampMs：后端 B8 已加 alias="timestampMs"，统一 camelCase 输出。
 // - answer：仅问答终态(succeeded)事件携带，其余为 null。
 export interface RunEvent {
   stage: Stage
   status: RunEventStatus
   message: string
   answer: Answer | null
-  timestamp_ms: number
+  timestampMs: number
 }

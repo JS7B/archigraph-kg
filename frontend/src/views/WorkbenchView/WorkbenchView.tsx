@@ -29,13 +29,13 @@ export function WorkbenchView() {
     if (last.status === 'succeeded' && last.answer) {
       setMessages((prev) => [
         ...prev,
-        { id: `a-${last.timestamp_ms}`, role: 'agent', text: last.answer!.text, answer: last.answer! },
+        { id: `a-${last.timestampMs}`, role: 'agent', text: last.answer!.text, answer: last.answer! },
       ])
       setChatRunId(null)
     } else if (last.status === 'failed') {
       setMessages((prev) => [
         ...prev,
-        { id: `a-${last.timestamp_ms}`, role: 'agent', text: `回答失败：${last.message}` },
+        { id: `a-${last.timestampMs}`, role: 'agent', text: `回答失败：${last.message}` },
       ])
       setChatRunId(null)
     }

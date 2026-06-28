@@ -31,11 +31,11 @@ export function RunEventTimeline({ events }: RunEventTimelineProps) {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
-        }).format(event.timestamp_ms)
+        }).format(event.timestampMs)
 
         return (
           <li
-            key={`${event.stage}-${event.status}-${event.timestamp_ms}`}
+            key={`${event.stage}-${event.status}-${event.timestampMs}`}
             className={`${styles.item} ${isCurrent ? styles.current : ''}`}
           >
             <span className={styles.marker} aria-hidden="true" />
@@ -45,7 +45,7 @@ export function RunEventTimeline({ events }: RunEventTimelineProps) {
                 <Chip className={statusClass[event.status]}>{statusLabel[event.status]}</Chip>
               </div>
               <p className={styles.message}>{event.message}</p>
-              <time className={styles.time} dateTime={new Date(event.timestamp_ms).toISOString()}>
+              <time className={styles.time} dateTime={new Date(event.timestampMs).toISOString()}>
                 {timeLabel}
               </time>
             </div>

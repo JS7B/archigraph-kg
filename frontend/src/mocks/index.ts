@@ -67,12 +67,12 @@ export const mockMessages: ChatMessage[] = [
 ]
 
 // 运行事件流：一次问答 Run 的阶段轨迹（searching → checking → writing → succeeded）。
-// 字段严格对齐后端契约：status 用 running/succeeded/failed，timestamp_ms 下划线，answer 终态才有。
+// 字段严格对齐后端契约：status 用 running/succeeded/failed，timestampMs camelCase，answer 终态才有。
 export const mockRunEvents: RunEvent[] = [
-  { stage: 'searching', status: 'running', message: '向量召回相关 chunk', answer: null, timestamp_ms: 1_718_600_000_000 },
-  { stage: 'checking', status: 'running', message: '校对引用与证据', answer: null, timestamp_ms: 1_718_600_001_200 },
-  { stage: 'writing', status: 'running', message: '生成带引用回答', answer: null, timestamp_ms: 1_718_600_002_400 },
-  { stage: 'idle', status: 'succeeded', message: '回答完成，附 2 条引用', answer: null, timestamp_ms: 1_718_600_003_600 },
+  { stage: 'searching', status: 'running', message: '向量召回相关 chunk', answer: null, timestampMs: 1_718_600_000_000 },
+  { stage: 'checking', status: 'running', message: '校对引用与证据', answer: null, timestampMs: 1_718_600_001_200 },
+  { stage: 'writing', status: 'running', message: '生成带引用回答', answer: null, timestampMs: 1_718_600_002_400 },
+  { stage: 'idle', status: 'succeeded', message: '回答完成，附 2 条引用', answer: null, timestampMs: 1_718_600_003_600 },
 ]
 
 // 文档库：三类样本文档，覆盖不同解析/索引状态
