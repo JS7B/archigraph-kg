@@ -66,3 +66,11 @@
 2. 真实问答"答不出"时，先直接调 `search_chunks` 看底层召回/报错，再怀疑上层 Agent 逻辑——症状（无法回答）离根因（索引维度）很远。
 3. 修复：`DROP INDEX chunk_embedding IF EXISTS` + `ensure_schema()` 以 3072 重建。
 4. 根治方向（待办）：测试用独立数据库/独立索引名，或 conftest teardown 恢复维度。共享单容器是「简单优先」的代价，需用纪律补。
+
+---
+
+## L7：浏览器 EventSource 不支持自定义 header → SSE 与 X-API-Key 鉴权冲突
+
+**场景**：PR 审计后加了 X-API-Key 鉴权中间件（后端 B2）。前端普通 fetch 能带 header，但 SSE 用浏览器原生 `EventSource`，**它不支持设自定义请求头**。一旦部署时后端配了 `API_KEY`，`/api/runs/{id}/events/stream` 会被 401 挡住，前端拿不到进度事件，像素动画失效。开发模式（后端 API_KEY 为空跳过校验）无影响，所以本地测不出来。
+
+**如何应用**：真要「公网部署 + 鉴权」时，SSE 鉴权需另解，常见方案：① token 走 query 参数 `?api_key=`（注意会进日志/历史，需配套）；② 改用 cookie 鉴权（EventSource 会带同源 cookie）；③ 用 fetch + ReadableStream 自实现 SSE 客户端（可带 header）。中间件对 SSE 路径要相应放行或换校验方式。当前个人项目开发模式不阻塞，记为部署前待办。
