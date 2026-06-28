@@ -379,3 +379,33 @@
     不同，build 的 `-b`（project references）更严格，验证务必跑 build 不只 typecheck。
   - roomScenes.css 里 `[data-stage="x"].dude` 漏写空格（应为 `] .dude`）会让选择器失效、
     小人在该状态不飘移。CSS 属性选择器与 class 之间必须有空格。
+
+## 2026-06-28 PR 审计整改 F1-F15（无障碍/响应式/契约）
+
+- 做了什么：按 PR 审计 §5 报告分四批整改前端（F0/F-契约 契约、F1-F7 无障碍
+  CRITICAL、F8-F11 响应式+交互 HIGH、F13/F14/F15 加分项）。F12 经评估跳过。
+
+- 这是什么：一次面向"简历硬规则 + 公开展示质量"的无障碍/体验系统整改。
+  报告依据 ui-ux-pro-max 十类规则，CRITICAL 项关系到简历可信度。
+
+- 为什么需要：前期专注功能跑通，无障碍/响应式欠账较多。GraphView 的 canvas
+  不可键盘访问、TopBar 状态灯是占位、颜色对比度不达 AA、缺主标题语义等，都是
+  公开仓库/简历展示的硬伤。
+
+- 为什么这么做（关键决策）：
+  - **契约同步（F0/F-契约）**：后端 B2/B8 已先改（X-API-Key + timestampMs alias），
+    前端跟着切。SSE 因 EventSource 不支持自定义 header，开发模式无影响，生产需
+    后端放行 /events/stream——在 sse.ts 标注隐患而非硬上 fetch-based 重写（简单优先）。
+  - **F5 用数据表补偿 canvas 不可达**：Cytoscape canvas 节点无法 Tab 访问，与其重写
+    键盘导航，不如在实体详情空状态补一个可 Tab 的实体按钮列表，复用已有选中逻辑，
+    最可靠。
+  - **F6 焦点管理用 activeElement 而非跨组件 ref**：设置触发按钮在 TopBar 深层，
+    App 拿不到它的 ref；用 document.activeElement 在打开时记录、关闭时还原，模式
+    干净不依赖组件树形状。
+  - **F12 跳过**：家具 hex 提取 token 收益低（纯整洁度），AgentRoom 颜色已集中，
+    过度提取违背简单优先。等真有多处复用需求再做。
+  - **F13 只做"屏幕发光仅 busy 时跑"，不改 idle bob 节奏**：0.6s 悬浮经调试已舒适，
+    改 0.4s 会让悬浮显焦躁——审美风险 > 收益。
+
+- 踩了什么坑：无重大踩坑。`tsc --noEmit` 与 `tsc -b` 严格度差异（前者宽、后者严）
+  此前已吃过亏，本轮每批都跑 build 验证。
