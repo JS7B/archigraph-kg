@@ -16,12 +16,12 @@ from app.parsing.models import Chunk, ParsedDocument, SourceLocation
 from app.qa import agent as agent_mod
 from app.qa.agent import answer_question_agentic
 from app.runs.models import Stage
+from tests.conftest import TEST_DIM
 
 pytestmark = pytest.mark.skipif(
     not is_configured(), reason="LLM 未配置，跳过真实 agent 测试"
 )
 
-TEST_DIM = 8
 DOC = "test_agent"
 
 # 检索的文档内容——让"数据库/图谱"类问题能命中。
