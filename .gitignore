@@ -41,6 +41,7 @@ uploads/
 .DS_Store
 Thumbs.db
 .superpowers/
+.claude/
 
 # subagent-driven-development working-tree reports
 /sdd/
