@@ -5,8 +5,9 @@
   min-height: 0;
 }
 
+/* 中列：对话区（ChatThread + CitationPanel + ChatComposer） */
 .mainCol {
-  flex: 1.7;
+  flex: 1;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -23,6 +24,18 @@
   border-radius: var(--radius-lg);
   padding: var(--space-4);
   box-shadow: var(--shadow-sm);
+}
+
+/* 空态：未选会话时的引导 */
+.emptyState {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
 }
 
 .citation {
@@ -44,8 +57,9 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* 右列：AgentRoom + Timeline */
 .sideCol {
-  flex: 1;
+  flex: 0 0 calc(var(--space-8) * 5);
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -68,7 +82,7 @@
   font-size: var(--text-sm);
 }
 
-/* F8 响应式：<860px 双栏堆叠成单列，主区与侧栏各自给最小高度避免挤扁 */
+/* 响应式：<860px 三列堆叠成单列（侧边栏自身有 max-height 折叠），主区与侧栏给最小高度 */
 @media (max-width: 860px) {
   .workbench {
     flex-direction: column;
@@ -80,5 +94,9 @@
 
   .stagePanel {
     min-height: calc(var(--space-8) * 9);
+  }
+
+  .sideCol {
+    flex-basis: auto;
   }
 }

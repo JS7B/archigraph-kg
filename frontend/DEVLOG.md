@@ -409,3 +409,34 @@
 
 - 踩了什么坑：无重大踩坑。`tsc --noEmit` 与 `tsc -b` 严格度差异（前者宽、后者严）
   此前已吃过亏，本轮每批都跑 build 验证。
+
+## 2026-06-29 多会话多轮对话记忆（前端 UI + mock 打通）
+
+- 做了什么：把工作台从「每次提问孤立单轮」升级为多会话多轮对话。新增会话侧边栏
+  （列表/新建/切换/删除带二次确认）、三列布局、会话状态管理、历史消息回灌。
+  后端会话 API 未就绪，先用本地 mock 打通 UI 与状态流（api/conversations.ts 的 USE_MOCK）。
+
+- 这是什么：一次"会话持久化"的前端改造。原先 messages state 是内存态、刷新即丢、
+  后端也不感知历史；现在引入 Conversation 维度，让"连续追问记住上文""切换会话恢复历史"
+  成为可能。
+
+- 为什么需要：单轮问答无法体现 Agent 的记忆能力，多轮对话是 RAG 工作台的基础体验。
+
+- 为什么这么做（关键决策）：
+  - **mock 开关收口在 api 层**：USE_MOCK 集中在 conversations.ts，UI 完全走真实流，
+    后端就绪后改一个常量即切真实，不用动组件。提问链路（/api/chat）不 mock——它本就
+    要等真实后端，mock 它会掩盖真实联调问题。
+  - **三列布局而非两列+抽屉**：会话列表是常用功能，固定侧边栏（240px）比抽屉更直接。
+    窄屏（<860px）侧边栏自身折叠成 max-height 200px 的横条。
+  - **ConversationMessage → ChatMessage 转换复用现有渲染**：让历史消息的引用角标、
+    CitationPanel 逻辑零改动（agent 消息还原成 {text, confidence, citations}）。
+  - **删除二次确认用自定义 dialog 而非 window.confirm**：保持风格统一 + 键盘可达
+    （autoFocus 确认按钮、Esc 取消路径可后续补）。
+
+- 边界（讲清楚，避免误用）：
+  - mock 模式下提问会失败（后端未就绪），这是预期的——mock 只打通会话 UI 流。
+  - 终态后只清 chatRunId 解除 busy，不清 conversationId（关键，否则追问会断）。
+  - refreshList 在终态后调用刷新侧边栏 messageCount/title，可能有轻微闪烁，可接受。
+
+- 踩了什么坑：无重大踩坑。Button 组件只支持 primary/secondary/ghost，没有 danger variant，
+  删除确认按钮改用 primary（设计系统暂无红色按钮 token，强行加会破坏一致性）。
