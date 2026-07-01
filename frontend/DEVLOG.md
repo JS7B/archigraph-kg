@@ -440,3 +440,27 @@
 
 - 踩了什么坑：无重大踩坑。Button 组件只支持 primary/secondary/ghost，没有 danger variant，
   删除确认按钮改用 primary（设计系统暂无红色按钮 token，强行加会破坏一致性）。
+
+## 2026-06-30 工作台布局重排 + 文档删除确认 + 会话状态保持
+
+- 做了什么：三件独立体验修正。① 引用证据面板从中列移到右列（对话区变大）；
+  AgentRoom 下方状态文字替换为 RunEventTimeline 运行轨迹。② 文档删除改为弹窗
+  二次确认，确认后才带 confirm=true 调后端。③ 视图切换改 CSS hidden 常驻，
+  切走再回来会话/对话历史不丢。
+
+- 这是什么：一次围绕"主对话区可用性"的体验修正，解决前两轮功能开发累积的三个痛点。
+
+- 为什么这么做（关键决策）：
+  - **引用面板挪右列、轨迹进 AgentRoom**：原中列塞三块（对话+引用+输入），引用面板
+    占 240px 挤得对话区很小。挪走后对话区独占中列；AgentRoom 下方原本只是静态状态
+    文字，换成实时运行轨迹更有信息密度。轨迹用浅色面板嵌入深色房间，视觉不突兀。
+  - **删除确认复用 ConversationSidebar 的 modal 风格**：不抽共享 ConfirmDialog 组件——
+    目前只有两处用（会话删除/文档删除），内联更直接；待第三处出现再抽，符合简单优先。
+  - **CSS hidden 常驻替代条件渲染**：原 `{view==='workbench' && <WorkbenchView/>}`
+    切走即卸载、state 全销毁。改 `<div hidden={view!==...}>` 常驻，组件不卸载、state
+    天然保留。比"提升 state 到 App"零改动 WorkbenchView，最简单。
+  - **GraphView 不加 active prop**：核实它无轮询（只 mount 时拉一次），Cytoscape 常驻
+    只占内存不发请求，闲置内存可接受。若实测卡顿再加。
+
+- 边界：sceneMap 的 label/detail 不删（busy 仍驱动 data-busy 动画，只是不再显示文字）。
+  红线守：AgentRoom 的 stage 仍只来自真实 RunEvent，events 仅驱动下方轨迹显示。

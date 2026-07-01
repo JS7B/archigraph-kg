@@ -329,23 +329,17 @@
   100% { transform: translateX(100%); }
 }
 
-/* ── 状态栏（房间下方：标签 + 进度文案）── */
-.status {
-  padding: 10px 14px;
-  border-top: 1px solid var(--room-line);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.statusLabel {
-  font-size: 13px;
-  font-weight: var(--weight-semibold);
-  color: var(--room-accent);
-}
-.statusDetail {
-  font-size: 11px;
-  color: var(--room-text);
-  margin-left: auto;
+/* ── 运行轨迹（画布下方）：替代原状态文字，复用 RunEventTimeline 组件。
+   用浅色背景做成"嵌入深色房间的浅色面板"，让 RunEventTimeline 的浅色 item 自然融入。
+   限高 + 滚动，避免轨迹条目喧宾夺主，让画布仍是主体。 ── */
+.timeline {
+  max-height: 140px;
+  overflow-y: auto;
+  margin: var(--space-2);
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
 }
 
 /* ═══ keyframes（小人悬浮，全状态通用）═══ */

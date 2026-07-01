@@ -42,9 +42,11 @@ export default function App() {
         onToggleSettings={() => setSettingsOpen((v) => !v)}
       />
       <main className={styles.main}>
-        {view === 'workbench' && <WorkbenchView />}
-        {view === 'library' && <LibraryView />}
-        {view === 'graph' && <GraphView />}
+        {/* 任务3：三个视图常驻渲染，用 hidden 切换显隐而非条件渲染。
+            组件不卸载，WorkbenchView 的会话/消息等 state 天然保留（切走再回来不丢）。 */}
+        <div className={styles.viewPane} hidden={view !== 'workbench'}><WorkbenchView /></div>
+        <div className={styles.viewPane} hidden={view !== 'library'}><LibraryView /></div>
+        <div className={styles.viewPane} hidden={view !== 'graph'}><GraphView /></div>
       </main>
       {settingsOpen && (
         <div

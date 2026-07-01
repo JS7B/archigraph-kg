@@ -59,6 +59,8 @@ export function LibraryView() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
   const [runError, setRunError] = useState<string | null>(null)
+  // 待确认删除的文档 id（非空时弹出确认框）
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const { events, currentStage } = useRunEvents(activeRunId)
   const isBusy = activeRunId !== null
@@ -118,10 +120,11 @@ export function LibraryView() {
     }
   }
 
+  // 删除文档：需带 ?confirm=true（后端安全设计）。调用前由弹窗二次确认。
   async function handleDelete(documentId: string) {
     try {
       const { runId } = await apiFetch<DeleteRunCreated>(
-        `/api/documents/${encodeURIComponent(documentId)}`,
+        `/api/documents/${encodeURIComponent(documentId)}?confirm=true`,
         { method: 'DELETE' },
       )
       setRunError(null)
@@ -129,6 +132,14 @@ export function LibraryView() {
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '删除请求失败'
       setRunError(msg)
+    }
+  }
+
+  // 确认删除：调用 handleDelete 并关闭弹窗。
+  function confirmDelete() {
+    if (pendingDelete) {
+      void handleDelete(pendingDelete)
+      setPendingDelete(null)
     }
   }
 
@@ -217,7 +228,7 @@ export function LibraryView() {
                   size="sm"
                   variant="ghost"
                   disabled={isBusy}
-                  onClick={() => handleDelete(document.id)}
+                  onClick={() => setPendingDelete(document.id)}
                 >
                   删除
                 </Button>
@@ -234,6 +245,23 @@ export function LibraryView() {
             上传文档
           </Button>
         </Card>
+      )}
+
+      {/* 删除二次确认对话框（键盘可达：autoFocus 确认按钮） */}
+      {pendingDelete && (
+        <div className={styles.confirmOverlay} role="dialog" aria-modal="true" aria-label="确认删除文档">
+          <div className={styles.confirmBox}>
+            <p className={styles.confirmText}>确定删除这个文档？删除后无法恢复。</p>
+            <div className={styles.confirmActions}>
+              <Button variant="ghost" onClick={() => setPendingDelete(null)}>
+                取消
+              </Button>
+              <Button variant="primary" onClick={confirmDelete} autoFocus>
+                删除
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   )
