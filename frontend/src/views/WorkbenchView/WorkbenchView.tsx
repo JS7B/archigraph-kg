@@ -9,10 +9,8 @@ import {
 import { ChatThread } from '../../components/ChatThread/ChatThread'
 import { ChatComposer } from '../../components/ChatComposer/ChatComposer'
 import { CitationPanel } from '../../components/CitationPanel/CitationPanel'
-import { RunEventTimeline } from '../../components/RunEventTimeline/RunEventTimeline'
 import { AgentRoom } from '../../components/AgentRoom/AgentRoom'
 import { ConversationSidebar } from '../../components/ConversationSidebar/ConversationSidebar'
-import { Panel } from '../../components/ui'
 import { useRunEvents } from '../../hooks/useRunEvents'
 import type {
   ChatMessage,
@@ -201,9 +199,6 @@ export function WorkbenchView() {
             </div>
           )}
         </div>
-        <div className={styles.citation}>
-          <CitationPanel citations={citations} activeChunkId={activeChunkId} />
-        </div>
         <div className={styles.composer}>
           <ChatComposer onSend={handleSend} busy={chatRunId !== null || !conversationId} />
         </div>
@@ -213,11 +208,12 @@ export function WorkbenchView() {
         <AgentRoom
           className={styles.stagePanel}
           stage={currentStage}
+          events={events}
         />
-        <Panel className={styles.timelinePanel} eyebrow="Run Events" title="运行轨迹">
-          <RunEventTimeline events={events} />
-          {error && <div className={styles.runError}>{error}</div>}
-        </Panel>
+        {error && <div className={styles.runError}>{error}</div>}
+        <div className={styles.citationPanel}>
+          <CitationPanel citations={citations} activeChunkId={activeChunkId} />
+        </div>
       </aside>
     </div>
   )

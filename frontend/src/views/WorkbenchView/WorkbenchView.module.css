@@ -5,7 +5,7 @@
   min-height: 0;
 }
 
-/* 中列：对话区（ChatThread + CitationPanel + ChatComposer） */
+/* 中列：对话区（ChatThread + ChatComposer）——引用面板已移到右列，对话区更大 */
 .mainCol {
   flex: 1;
   display: flex;
@@ -38,17 +38,6 @@
   line-height: var(--leading-relaxed);
 }
 
-.citation {
-  flex: 0 0 auto;
-  max-height: 240px; /* 引用证据抽屉：固定上限，内部滚动；240px 约可见 2 条条目 */
-  overflow: auto;
-  background: var(--color-accent-soft);
-  border: 1px solid var(--color-accent-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3);
-  box-shadow: var(--shadow-xs);
-}
-
 .composer {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -57,14 +46,14 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* 右列：AgentRoom + Timeline */
+/* 右列：AgentRoom（含运行轨迹） + CitationPanel */
 .sideCol {
   flex: 0 0 calc(var(--space-8) * 5);
   display: flex;
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .stagePanel {
@@ -72,8 +61,16 @@
   min-height: 0; /* AgentRoom 内容自适应，flex 比例由父侧栏控制 */
 }
 
-.timelinePanel {
+/* 引用证据面板（移到右列）：固定上限 + 内部滚动 */
+.citationPanel {
   flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--color-accent-soft);
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  box-shadow: var(--shadow-xs);
 }
 
 .runError {

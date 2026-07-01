@@ -10,6 +10,15 @@
   padding: var(--space-4);
 }
 
+/* 视图面板：常驻渲染，hidden 属性切显隐。hidden 天然 display:none + 移出无障碍树。
+   非 hidden 时铺满 main 高度。 */
+.viewPane {
+  height: 100%;
+}
+.viewPane[hidden] {
+  display: none;
+}
+
 /* 遮罩层：全屏半透明，点击空白处关闭设置面板 */
 .settingsOverlay {
   position: fixed;

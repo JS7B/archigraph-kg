@@ -1,12 +1,15 @@
-import type { Stage } from '../../types'
+import type { RunEvent, Stage } from '../../types'
 import { sceneMap } from './sceneMap'
 import { DUDE_SHADOW } from './drawDude'
 import { useAgentPosition } from './useAgentPosition'
+import { RunEventTimeline } from '../RunEventTimeline/RunEventTimeline'
 import styles from './AgentRoom.module.css'
 import './roomScenes.css'
 
 interface AgentRoomProps {
   stage: Stage
+  /** 运行事件流：驱动下方 RunEventTimeline（运行轨迹），由 useRunEvents 提供。 */
+  events?: RunEvent[]
   // 外部 className 透传（用于父级控制 flex 比例等布局）。
   className?: string
 }
@@ -24,7 +27,7 @@ interface AgentRoomProps {
  * 道具/家具 DOM 常驻、CSS 按 data-stage 显隐（避免切换重建跳变）。
  * 道具用全局 class 名（p-xxx），不经 module hash，故 roomScenes.css 能稳定选中。
  */
-export function AgentRoom({ stage, className }: AgentRoomProps) {
+export function AgentRoom({ stage, events, className }: AgentRoomProps) {
   const cfg = sceneMap[stage]
   const rootClass = [styles.room, className ?? ''].filter(Boolean).join(' ')
   // 小人位置由 rAF 逐帧插值驱动（中断即转），见 useAgentPosition.ts。
@@ -88,10 +91,9 @@ export function AgentRoom({ stage, className }: AgentRoomProps) {
         <div className={styles.ground} />
       </div>
 
-      {/* 状态栏（画布下方，正常流）*/}
-      <div className={styles.status}>
-        <span className={styles.statusLabel}>{cfg.label}</span>
-        <span className={styles.statusDetail}>{cfg.detail}</span>
+      {/* 运行轨迹（画布下方，替代原状态文字）：RunEventTimeline 复用现有组件。 */}
+      <div className={styles.timeline}>
+        <RunEventTimeline events={events ?? []} />
       </div>
     </div>
   )
