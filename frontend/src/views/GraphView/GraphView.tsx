@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import cytoscape from 'cytoscape'
 import type { ElementDefinition } from 'cytoscape'
-import { Card, Chip, DataValue, Eyebrow, Panel } from '../../components/ui'
+import { Button, Card, Chip, DataValue, Eyebrow, Panel } from '../../components/ui'
 import { ApiError } from '../../api/client'
 import { fetchGraph } from '../../api/graph'
 import type { GraphData, GraphEdge, GraphNode } from '../../types'
@@ -246,6 +246,9 @@ export function GraphView() {
             />
           </label>
           <span className={styles.searchHint}>输入名称会高亮匹配节点，并弱化其他图谱元素。</span>
+          <Button variant="ghost" size="sm" disabled={loading} onClick={() => void refresh()}>
+            刷新图谱
+          </Button>
         </Card>
       </header>
 
