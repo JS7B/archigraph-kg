@@ -192,6 +192,9 @@ export function LibraryView() {
           <Button variant="primary" disabled={isBusy} onClick={() => fileInputRef.current?.click()}>
             上传文档
           </Button>
+          <Button variant="ghost" onClick={() => void refresh()} aria-label="刷新文档列表">
+            刷新列表
+          </Button>
         </div>
       </header>
 

@@ -90,6 +90,12 @@ async def run_ingest(
         _emit(store, run_id, Stage.INDEXING, message="抽取实体与关系")
         stats = await asyncio.to_thread(extract_and_ingest, driver, doc)
 
+        # 抽取完成后先发一条 running 状态的"请刷新"提示（非终态）。
+        # 应对前端 SSE 终态事件丢失场景：即使后续终态事件丢，用户看到此提示即可手动刷新。
+        _emit(
+            store, run_id, Stage.INDEXING,
+            message="入库完成 ✓ 请刷新页面查看",
+        )
         _emit(
             store, run_id, Stage.IDLE, RunStatus.SUCCEEDED,
             message=(

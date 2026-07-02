@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import cytoscape from 'cytoscape'
 import type { ElementDefinition } from 'cytoscape'
-import { Card, Chip, DataValue, Eyebrow, Panel } from '../../components/ui'
+import { Button, Card, Chip, DataValue, Eyebrow, Panel } from '../../components/ui'
 import { ApiError } from '../../api/client'
 import { fetchGraph } from '../../api/graph'
 import type { GraphData, GraphEdge, GraphNode } from '../../types'
@@ -175,6 +175,11 @@ export function GraphView() {
       wheelSensitivity: 0.15,
     })
 
+    // 容器可能因视图常驻（hidden）而尺寸为 0，渲染后立即 resize + fit 兜底，
+    // 避免图谱在可见时却显示空白。
+    cy.resize()
+    cy.fit(undefined, 48)
+
     cyRef.current = cy
 
     cy.on('tap', 'node', (event) => {
@@ -233,18 +238,28 @@ export function GraphView() {
         </div>
 
         <Card className={styles.searchCard} padding="md">
-          <label className={styles.searchLabel}>
-            <span className={styles.searchCaption}>实体搜索</span>
-            <input
-              className={styles.searchInput}
-              type="search"
-              inputMode="search"
-              enterKeyHint="search"
-              value={searchTerm}
-              placeholder="搜索实体…"
-              onChange={(event) => setSearchTerm(event.target.value)}
-            />
-          </label>
+          <div className={styles.searchRow}>
+            <label className={styles.searchLabel}>
+              <span className={styles.searchCaption}>实体搜索</span>
+              <input
+                className={styles.searchInput}
+                type="search"
+                inputMode="search"
+                enterKeyHint="search"
+                value={searchTerm}
+                placeholder="搜索实体…"
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+            </label>
+            <Button
+              variant="primary"
+              disabled={loading}
+              onClick={() => void refresh()}
+              aria-label="刷新图谱"
+            >
+              刷新图谱
+            </Button>
+          </div>
           <span className={styles.searchHint}>输入名称会高亮匹配节点，并弱化其他图谱元素。</span>
         </Card>
       </header>
