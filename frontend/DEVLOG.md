@@ -705,3 +705,42 @@
   兜底 `declare module`；fcose 的 layout 选项（nodeSeparation 等）不在 cytoscape
   内置 LayoutOptions 联合类型里，用 `as unknown as cytoscape.LayoutOptions` 收口。
   注：度数分档/隐藏开关的最终视觉验收需连真实样本图数据肉眼过一遍（构建层已通过）。
+
+
+## 2026-07-03 F3 AgentRoom 生命感（行为队列状态机）+ 修死掉的演出层
+
+- 做了什么：把小人从「stage → 单一落点」升级为「stage → 一段行为剧本」的**行为队列
+  状态机**。行为 = {目标工位 x, 微动作, 停留时长}：先走到 x（rAF 插值），到位后把微动作
+  写到 canvas 的 `data-action` 上停留，再取下一个；队列空则续排——工作 stage 循环剧本
+  （searching：档案柜翻找→抱文件走回桌→翻阅→循环；writing：打字+偶尔挠头/伸懒腰；
+  linking：连线台比划；checking：桌前翻页），真实 idle 加权随机（喝咖啡/踱步/发呆/
+  打瞌睡，间隔 8~20s）。新增随身道具：手持文件、zzz 气泡。顺手修了演出层的死选择器 bug，
+  并给画布加"夜间小剧场"纵深光影。配套：linking 文案「拉关系」→「扩展图谱线索」；
+  死 stage 就近标注"仅预览可达"；StyleGallery 改静态首帧预览；前端说明.md §8 同步。
+
+- 这是什么：行为队列状态机 = 用一个队列描述"接下来依次做什么"，配 rAF 逐帧插值驱动
+  位置、`data-action` 属性驱动姿态。`data-action` 是写在 DOM 上的普通属性，CSS 用
+  `[data-action=type] .ar-dude` 这类**属性选择器**据它切换动画，不进 React 渲染（60fps
+  不触发 re-render）。
+
+- 为什么需要：小人可用动作只剩问答链路几个静态站位，"生命感"稀薄。更关键——排查时
+  发现 `roomScenes.css` 的演出规则写成全局裸类名 `.canvas`/`.dude`，而元素挂的是 CSS
+  Module 的哈希类名（`_canvas_xxx`/`_dude_xxx`），**两套对不上、永远命不中**：linking
+  连线、searching 放大镜、error 红光+抖动其实**从来没显示过**（是死代码）。要做"生命感"
+  绕不开先把这层选择器机制修对。
+
+- 为什么这么做：① 选择器改「`[data-action]`/`[data-stage]` 属性选择 + 稳定全局类
+  （`.ar-dude`/`.p-doc`…）」命中——属性选择器不依赖元素类名，天然命中哈希元素的祖先。
+  ② 小人姿态原由 module 里 `[data-busy=1] .dude`（(0,3,0)）驱动，会盖过我的
+  `[data-action] .ar-dude`（(0,2,0)）——干脆**退休 busy 摆动**，让 data-action 统一驱动
+  小人所有姿态，消除层叠打架。③ 位置初值改由 hook 写 inline（去掉 JSX 硬编码 left），
+  避免 stage 变化 re-render 把 left 重置；module 里留 `left:16%` 作挂载前占位防闪。
+  ④ 中断即转沿用：stage 一变即 effect cleanup 丢当前队列、以真实当前位置为起点重排剧本。
+  ⑤ 红线守住：stage 只来自真实 RunEvent，data-action 只是 stage 内部表现层编排；
+  瞌睡/闲逛只在真实 idle；reduced-motion 时状态机静立仅呼吸、不排剧本、不走动。
+
+- 踩了什么坑：核心坑就是上面那个"全局裸类名命不中哈希元素"的死选择器——只有连真实后端
+  跑起来才看得出没显示，构建/类型都不报错，极隐蔽。教训：CSS Module 项目里，**全局 CSS
+  文件不能用裸类名选 module 元素**，只能靠属性选择 + 显式挂的全局类。
+  另：视觉层（姿态幅度、道具像素位置、光影）需在浏览器里肉眼逐项调，本次只保证构建绿 +
+  StyleGallery 可静态预览全 12 状态首帧，精细视觉验收交人工过一遍。

@@ -162,17 +162,18 @@ export function StyleGallery() {
         </div>
       </Section>
 
-      {/* AgentRoom — 12 状态全览 */}
+      {/* AgentRoom — 12 状态全览（预览：静态首帧，不跑循环演出）*/}
       <Section eyebrow="Signature" title="像素档案员 · 12 状态">
         <p className={styles.cardText}>
-          深紫调像素小房间：极简悬浮小人按状态横向飘到对应家具工位前，动作由家具自身运转
-          （打印机吐纸 / 咖啡冒热气 / 档案柜开抽屉 / 碎纸机吞纸）表达。
-          每个状态由真实 <code>RunEvent.stage</code> 驱动，下方网格展示全部 12 个状态。
+          深紫调像素小房间：小人按当前 <code>RunEvent.stage</code> 的行为剧本在房间里演出
+          （翻找 / 抱文件走回 / 打字 / 发呆 / 打瞌睡…），位置逐帧插值、中断即转，微动作与
+          手持文件 / zzz 气泡由 <code>data-action</code> 驱动。下方目录为每个状态的**静态首帧**
+          预览（不循环）；真实循环演出请在工作台发起问答观察。
         </p>
         <div className={styles.agentGrid}>
           {ALL_STAGES.map((s) => (
             <div key={s} className={styles.agentCell}>
-              <AgentRoom stage={s} />
+              <AgentRoom stage={s} preview />
               <div className={styles.agentCap}>
                 <DataValue>{s}</DataValue>
                 <span className={styles.agentLabel}>{sceneMap[s].label}</span>

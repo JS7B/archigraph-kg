@@ -15,12 +15,17 @@
   box-shadow: var(--shadow-md);
 }
 
-/* 画布：固定高度，承载所有场景元素，relative 定位锚 */
+/* 画布：固定高度，承载所有场景元素，relative 定位锚。
+   背景分层做"夜间小剧场"纵深：顶部一束柔光（吊灯/追光）+ 底边暗角（vignette）
+   叠在深紫渐变上，让浅色小人与家具从深底里浮起来。 */
 .canvas {
   position: relative;
   height: 220px;
   overflow: hidden;
-  background: linear-gradient(180deg, var(--room-top) 0%, var(--room-bot) 100%);
+  background:
+    radial-gradient(120% 78% at 50% -12%, rgba(193, 158, 255, 0.18), transparent 55%),
+    radial-gradient(100% 90% at 50% 118%, rgba(0, 0, 0, 0.38), transparent 60%),
+    linear-gradient(180deg, var(--room-top) 0%, var(--room-bot) 100%);
   image-rendering: pixelated;
 }
 
@@ -268,6 +273,7 @@
 .dude {
   position: absolute;
   bottom: 66px;
+  left: 16%; /* hook 写 inline left 前的默认位（避免挂载首帧 left:auto 闪一下）*/
   width: 4px;
   height: 4px;
   margin-left: -12px;
@@ -280,6 +286,7 @@
 .dudeShadow {
   position: absolute;
   bottom: 52px;
+  left: 16%; /* 与小人同源默认位，hook 写 inline left 前的占位 */
   width: 26px;
   height: 5px;
   transform: translateX(-50%);
@@ -287,10 +294,8 @@
   z-index: 3;
 }
 
-/* 工作时（data-busy=1）：小人摆动更明显（带轻微旋转，不做手臂）*/
-.canvas[data-busy="1"] .dude {
-  animation: ar-bob-busy 0.6s ease-in-out infinite alternate;
-}
+/* 小人的"活人感"（走/搬/打字/发呆/瞌睡…）改由 data-action 统一驱动，见 roomScenes.css
+   的 [data-action] .ar-dude 规则。此处不再单独做 busy 摆动，避免层叠优先级互相打架。 */
 
 /* error 红光层（按 data-stage 显隐，见 roomScenes.css 触发）*/
 .pErr {
@@ -342,12 +347,8 @@
   border-radius: var(--radius);
 }
 
-/* ═══ keyframes（小人悬浮，全状态通用）═══ */
+/* ═══ keyframes（小人悬浮基线；各微动作的 keyframes 在 roomScenes.css）═══ */
 @keyframes ar-bob {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-3px); }
-}
-@keyframes ar-bob-busy {
-  0% { transform: translateY(0) rotate(-2deg); }
-  100% { transform: translateY(-3px) rotate(2deg); }
 }
