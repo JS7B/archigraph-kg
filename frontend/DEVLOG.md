@@ -744,3 +744,25 @@
   文件不能用裸类名选 module 元素**，只能靠属性选择 + 显式挂的全局类。
   另：视觉层（姿态幅度、道具像素位置、光影）需在浏览器里肉眼逐项调，本次只保证构建绿 +
   StyleGallery 可静态预览全 12 状态首帧，精细视觉验收交人工过一遍。
+
+
+## 2026-07-03 R1 复审修复 · F1（代码区污染 + 渲染记忆化）
+
+- 做了什么：① 角标转换从字符串正则预处理改为 remark AST 插件 `remarkCitations`——
+  只改写 mdast 的 text 节点，天然跳过代码（inlineCode/code 是独立节点类型）；删除
+  `linkifyCitations`。② 单条消息抽成 `React.memo` 的 `MessageItem` 子组件，components
+  覆写用 useMemo 按 citations/onCitationClick 缓存。
+
+- 为什么需要：① 字符串层全局替换会污染回答里的代码——行内 `arr[0]`、围栏代码块中的
+  `a[3]` 会被替成 `[[0]](#cite-0)` 原样显示；本产品常答技术问题、代码频出。② 原实现每次
+  渲染都全量重跑 linkify/buildComponents，点一次角标 → activeChunkId 变 → 整个会话所有
+  消息重新解析 Markdown，会话一长就卡。
+
+- 为什么这么做：AST 插件是"跳过代码"的正解（代码在 mdast 里就是非 text 节点，遍历 text
+  即绕开），比"按反引号分段"的字符串 hack 稳。用 mdast-util-from-markdown 实测：散文
+  `[1][2]` 成 `#cite-1/2` 链接，`arr[0]`/`a[3]` 代码原文保留不变。memo 子组件靠
+  onCitationClick（useState setter，稳定）+ message 引用稳定，点角标只更新 activeChunkId
+  时各条 props 未变 → 跳过重渲染。插件返回的 transformer 参数用 unknown 收口，规避
+  MdNode 与 unist Node 的函数逆变类型摩擦。
+
+- 踩了什么坑：无（build 绿；插件行为经离线 mdast 解析验证）。
