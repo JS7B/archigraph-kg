@@ -103,6 +103,13 @@ def _entity_recall(system_entities: list, gold_entities: list[dict]) -> tuple[fl
     return len(hit) / len(gold_norm), missed
 
 
+def _unmatched_extracted(system_entities: list, gold_entities: list[dict]) -> list[str]:
+    """抽出但未命中任何标注实体的清单（噪声候选）。让「噪声」在报告里可见，
+    弥补只量召回的盲区；不参与召回计算，故与 57.1% 基线可比。"""
+    gold_norm = {_norm(g["name"]) for g in gold_entities}
+    return [e.name for e in system_entities if _norm(e.normalized_name) not in gold_norm]
+
+
 def _relation_usable(merged_relations: list, raw_relation_total: int) -> float:
     """关系可用率：成链关系数 / 原始关系数。merge 丢弃（端点解析失败）算不可用。"""
     if raw_relation_total == 0:
@@ -215,12 +222,14 @@ def main():
             print(f"  抽取: {ext_detail['merged_entities']} 实体 / {ext_detail['merged_relations']} 关系 / {ext_detail['failed_chunks']} 失败chunk")
 
             recall, missed = _entity_recall(entities, gt["entities"])
+            unmatched = _unmatched_extracted(entities, gt["entities"])
             usable = _relation_usable(relations, ext_detail["raw_relations"])
             total_gold_entities += len(gt["entities"])
             total_hit_entities += round(recall * len(gt["entities"]))
             total_raw_relations += ext_detail["raw_relations"]
             total_usable_relations += ext_detail["merged_relations"]
             print(f"  实体召回率: {recall:.1%} (漏 {len(missed)})")
+            print(f"  抽出 {len(entities)} 实体 / 标注 {len(gt['entities'])}（未匹配抽出 {len(unmatched)}）")
             print(f"  关系可用率: {usable:.1%}")
 
             qa_results = []
@@ -238,6 +247,9 @@ def main():
                 "extraction": ext_detail,
                 "entity_recall": recall,
                 "missed_entities": missed,
+                "extracted_total": len(entities),
+                "gold_total": len(gt["entities"]),
+                "unmatched_extracted": unmatched,
                 "relation_usable": usable,
                 "qa": qa_results,
             })
@@ -303,8 +315,17 @@ def write_report(results: list, summary: dict, uncited: list) -> None:
         e = r.get("extraction", {})
         lines.append(f"- 抽取: {e.get('merged_entities',0)} 实体 / {e.get('merged_relations',0)} 关系 / {e.get('failed_chunks',0)} 失败chunk")
         lines.append(f"- 实体召回率: {r.get('entity_recall',0):.1%}")
+        lines.append(
+            f"- 抽出实体总数: {r.get('extracted_total',0)} / 标注数: {r.get('gold_total',0)}"
+        )
         if r.get("missed_entities"):
             lines.append(f"  - 漏掉的标注实体: {', '.join(r['missed_entities'][:10])}")
+        unmatched = r.get("unmatched_extracted") or []
+        if unmatched:
+            lines.append(
+                f"  - 未匹配抽出实体（噪声候选，共 {len(unmatched)} 个）: "
+                f"{', '.join(unmatched[:20])}"
+            )
         lines.append(f"- 关系可用率: {r.get('relation_usable',0):.1%}")
         for q in r.get("qa", []):
             lines.append(f"- Q: {q['question']}")
