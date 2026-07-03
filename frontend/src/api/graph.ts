@@ -19,6 +19,8 @@ interface RawNode {
   name: string
   type: string
   documentId: string
+  degree?: number // 后端 B4 提供；未就绪时字段缺失，前端 edges 兜底
+  mentionCount?: number // 后端 B4 提供
 }
 interface RawEdge {
   source: string
@@ -32,7 +34,14 @@ interface RawGraph {
 }
 
 function mapNode(n: RawNode): GraphNode {
-  return { id: n.id, label: n.name, entityType: n.type }
+  return {
+    id: n.id,
+    label: n.name,
+    entityType: n.type,
+    // 后端字段可能未就绪：仅在存在时透传，缺省交给 View 层 edges 兜底
+    ...(typeof n.degree === 'number' ? { degree: n.degree } : {}),
+    ...(typeof n.mentionCount === 'number' ? { mentionCount: n.mentionCount } : {}),
+  }
 }
 
 function mapEdge(e: RawEdge): GraphEdge {

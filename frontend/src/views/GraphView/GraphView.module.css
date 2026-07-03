@@ -113,6 +113,30 @@
   line-height: var(--leading-snug);
 }
 
+/* 隐藏孤立节点开关 */
+.toggleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  color: var(--color-text-body);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  cursor: pointer;
+}
+
+.toggleInput {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.toggleText {
+  user-select: none;
+}
+
 .canvasShell {
   position: relative;
   min-width: 0;
@@ -350,6 +374,28 @@
 
 .entityListLabel {
   overflow-wrap: anywhere;
+}
+
+/* 实体列表项右侧：类型 Chip + 度数徽标 */
+.entityListMeta {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.entityDegree {
+  min-width: 20px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  padding: 0 var(--space-1);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  line-height: 18px;
+  text-align: center;
 }
 
 @media (max-width: 960px) {

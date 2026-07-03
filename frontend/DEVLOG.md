@@ -676,3 +676,32 @@
   `<div className={styles.answerText}>` 承载排版样式；表格横向滚动用
   `display:block; width:max-content; max-width:100%; overflow-x:auto` 的
   GitHub 惯用写法，直接给 `<table>` 加 overflow 不生效。
+
+
+## 2026-07-03 F2 图谱展示分级降噪（fcose + 度数分档 + 隐藏孤立点）
+
+- 做了什么：GraphView 布局从内置 cose 换成 cytoscape-fcose；节点尺寸/颜色按
+  度数分 3 档（+孤立档）——孤立灰小、高度数深大；新增「隐藏孤立节点」开关默认开
+  （滤掉度数 0 的点及其悬挂边）；右侧实体列表改按度数降序、每项带类型 Chip 与
+  度数徽标。度数来源写成 `nodeDegree()` 单函数：后端 degree 字段优先、缺省用
+  edges 本地计数兜底。
+
+- 这是什么：fcose 是 Cytoscape 的力导向布局插件（f = fast），大图上节点铺展与
+  聚类质量明显优于内置 cose。「度数」= 一个实体在图里连了几条边，是最朴素的
+  重要性信号：连得多的是核心概念，连 0 条的往往是抽取噪声。
+
+- 为什么需要：后端列表按名字排序、画布全量平铺，核心节点与孤立噪声视觉权重
+  相同，就是「机械粗糙」观感的展示层成因。用度数给节点分级 + 默认藏掉孤立点，
+  能立刻把核心实体顶出来、把噪声压下去（噪声本身由后端 B1-B6 另线修抽取质量）。
+
+- 为什么这么做：度数分「离散档位」而非连续插值——插值在小图上层次反而糊，
+  3 档（浅→深、小→大）对比更利落，符合规格「不做连续插值」。degree 用
+  `node.degree ?? edges 计数` 兜底：后端 B4 字段一旦到位，同一函数自动改用真值，
+  无需二次改代码（这就是规格要求的「一处切换点」）。隐藏孤立时同时滤掉悬挂边
+  （要求两端都可见），避免出现连不到点的孤边。实体列表始终含全部节点（含孤立），
+  保证键盘可达路径不因画布隐藏而丢失，孤立点自然沉到列表末尾。
+
+- 踩了什么坑：cytoscape-fcose 无官方 TS 类型，加 `src/cytoscape-fcose.d.ts`
+  兜底 `declare module`；fcose 的 layout 选项（nodeSeparation 等）不在 cytoscape
+  内置 LayoutOptions 联合类型里，用 `as unknown as cytoscape.LayoutOptions` 收口。
+  注：度数分档/隐藏开关的最终视觉验收需连真实样本图数据肉眼过一遍（构建层已通过）。
