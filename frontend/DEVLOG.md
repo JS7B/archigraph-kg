@@ -645,3 +645,169 @@
 
 - 踩了什么坑：无（后端跨线程 emit 沿用 run_chat 的 call_soon_threadsafe
   模式，见 backend/DEVLOG.md 同日记录）。
+
+
+## 2026-07-03 F1 回答区 Markdown 化 + 引用角标内联芯片
+
+- 做了什么：ChatThread 回答正文从纯文本插值改为 react-markdown + remark-gfm
+  渲染；正文里的 `[n]` 角标预处理成 `[[n]](#cite-n)` 链接语法，覆写 markdown 的
+  `a` 组件把 `#cite-` 前缀渲染成可点内联引用芯片（点击复用原有 CitationPanel
+  高亮+滚动逻辑），越界号自然降级为纯文本；末尾按钮排改为「本回答引用：[1][2]…」
+  汇总行，与正文角标复用同一芯片；配套 CSS 给 markdown 产物排版、用户气泡
+  `pre-wrap`、代码块/表格 `overflow-x: auto`。
+
+- 这是什么：react-markdown 是把 Markdown 字符串安全渲染成 React 元素的库
+  （不启用 raw HTML，天然免 XSS）；remark-gfm 补上表格/删除线/任务列表等
+  GitHub 风格扩展。「组件覆写」指用 `components={{ a: ... }}` 拦截某类节点自定义
+  渲染——这里把引用角标从"纯文本"升级成"随句可点的芯片"。
+
+- 为什么需要：回答是产品门面，之前 `.answerText` 无 `white-space`、正文纯插值，
+  换行被折叠、列表/粗体/表格原样显示，文字挤成一团；角标两套并存（正文纯文本
+  `[n]` + 末尾按钮）位置对不上。一行 CSS 只能救换行，救不了列表与结构。
+
+- 为什么这么做：角标走「正则预处理 + a 覆写」而非自写 Markdown AST 插件——
+  用 Markdown 原生链接语法承载角标，改动最小且天然继承解析器的括号处理；
+  芯片抽成 ChatThread 内的局部组件，正文与汇总行复用一处造型/回调，不新建文件。
+  用 micromark 实测 `[[1]](#cite-1)` 稳定解析为 `<a href="#cite-1">[1]</a>`，
+  越界 `[999]` 也成链接、由覆写降级为纯文本，确认括号语义可靠后才落地。
+  历史会话回灌（toChatMessages 已构造 answer 对象）自动走同一渲染路径，无需另改。
+
+- 踩了什么坑：react-markdown v10 移除了组件自身的 `className` 属性，需外层包
+  `<div className={styles.answerText}>` 承载排版样式；表格横向滚动用
+  `display:block; width:max-content; max-width:100%; overflow-x:auto` 的
+  GitHub 惯用写法，直接给 `<table>` 加 overflow 不生效。
+
+
+## 2026-07-03 F2 图谱展示分级降噪（fcose + 度数分档 + 隐藏孤立点）
+
+- 做了什么：GraphView 布局从内置 cose 换成 cytoscape-fcose；节点尺寸/颜色按
+  度数分 3 档（+孤立档）——孤立灰小、高度数深大；新增「隐藏孤立节点」开关默认开
+  （滤掉度数 0 的点及其悬挂边）；右侧实体列表改按度数降序、每项带类型 Chip 与
+  度数徽标。度数来源写成 `nodeDegree()` 单函数：后端 degree 字段优先、缺省用
+  edges 本地计数兜底。
+
+- 这是什么：fcose 是 Cytoscape 的力导向布局插件（f = fast），大图上节点铺展与
+  聚类质量明显优于内置 cose。「度数」= 一个实体在图里连了几条边，是最朴素的
+  重要性信号：连得多的是核心概念，连 0 条的往往是抽取噪声。
+
+- 为什么需要：后端列表按名字排序、画布全量平铺，核心节点与孤立噪声视觉权重
+  相同，就是「机械粗糙」观感的展示层成因。用度数给节点分级 + 默认藏掉孤立点，
+  能立刻把核心实体顶出来、把噪声压下去（噪声本身由后端 B1-B6 另线修抽取质量）。
+
+- 为什么这么做：度数分「离散档位」而非连续插值——插值在小图上层次反而糊，
+  3 档（浅→深、小→大）对比更利落，符合规格「不做连续插值」。degree 用
+  `node.degree ?? edges 计数` 兜底：后端 B4 字段一旦到位，同一函数自动改用真值，
+  无需二次改代码（这就是规格要求的「一处切换点」）。隐藏孤立时同时滤掉悬挂边
+  （要求两端都可见），避免出现连不到点的孤边。实体列表始终含全部节点（含孤立），
+  保证键盘可达路径不因画布隐藏而丢失，孤立点自然沉到列表末尾。
+
+- 踩了什么坑：cytoscape-fcose 无官方 TS 类型，加 `src/cytoscape-fcose.d.ts`
+  兜底 `declare module`；fcose 的 layout 选项（nodeSeparation 等）不在 cytoscape
+  内置 LayoutOptions 联合类型里，用 `as unknown as cytoscape.LayoutOptions` 收口。
+  注：度数分档/隐藏开关的最终视觉验收需连真实样本图数据肉眼过一遍（构建层已通过）。
+
+
+## 2026-07-03 F3 AgentRoom 生命感（行为队列状态机）+ 修死掉的演出层
+
+- 做了什么：把小人从「stage → 单一落点」升级为「stage → 一段行为剧本」的**行为队列
+  状态机**。行为 = {目标工位 x, 微动作, 停留时长}：先走到 x（rAF 插值），到位后把微动作
+  写到 canvas 的 `data-action` 上停留，再取下一个；队列空则续排——工作 stage 循环剧本
+  （searching：档案柜翻找→抱文件走回桌→翻阅→循环；writing：打字+偶尔挠头/伸懒腰；
+  linking：连线台比划；checking：桌前翻页），真实 idle 加权随机（喝咖啡/踱步/发呆/
+  打瞌睡，间隔 8~20s）。新增随身道具：手持文件、zzz 气泡。顺手修了演出层的死选择器 bug，
+  并给画布加"夜间小剧场"纵深光影。配套：linking 文案「拉关系」→「扩展图谱线索」；
+  死 stage 就近标注"仅预览可达"；StyleGallery 改静态首帧预览；前端说明.md §8 同步。
+
+- 这是什么：行为队列状态机 = 用一个队列描述"接下来依次做什么"，配 rAF 逐帧插值驱动
+  位置、`data-action` 属性驱动姿态。`data-action` 是写在 DOM 上的普通属性，CSS 用
+  `[data-action=type] .ar-dude` 这类**属性选择器**据它切换动画，不进 React 渲染（60fps
+  不触发 re-render）。
+
+- 为什么需要：小人可用动作只剩问答链路几个静态站位，"生命感"稀薄。更关键——排查时
+  发现 `roomScenes.css` 的演出规则写成全局裸类名 `.canvas`/`.dude`，而元素挂的是 CSS
+  Module 的哈希类名（`_canvas_xxx`/`_dude_xxx`），**两套对不上、永远命不中**：linking
+  连线、searching 放大镜、error 红光+抖动其实**从来没显示过**（是死代码）。要做"生命感"
+  绕不开先把这层选择器机制修对。
+
+- 为什么这么做：① 选择器改「`[data-action]`/`[data-stage]` 属性选择 + 稳定全局类
+  （`.ar-dude`/`.p-doc`…）」命中——属性选择器不依赖元素类名，天然命中哈希元素的祖先。
+  ② 小人姿态原由 module 里 `[data-busy=1] .dude`（(0,3,0)）驱动，会盖过我的
+  `[data-action] .ar-dude`（(0,2,0)）——干脆**退休 busy 摆动**，让 data-action 统一驱动
+  小人所有姿态，消除层叠打架。③ 位置初值改由 hook 写 inline（去掉 JSX 硬编码 left），
+  避免 stage 变化 re-render 把 left 重置；module 里留 `left:16%` 作挂载前占位防闪。
+  ④ 中断即转沿用：stage 一变即 effect cleanup 丢当前队列、以真实当前位置为起点重排剧本。
+  ⑤ 红线守住：stage 只来自真实 RunEvent，data-action 只是 stage 内部表现层编排；
+  瞌睡/闲逛只在真实 idle；reduced-motion 时状态机静立仅呼吸、不排剧本、不走动。
+
+- 踩了什么坑：核心坑就是上面那个"全局裸类名命不中哈希元素"的死选择器——只有连真实后端
+  跑起来才看得出没显示，构建/类型都不报错，极隐蔽。教训：CSS Module 项目里，**全局 CSS
+  文件不能用裸类名选 module 元素**，只能靠属性选择 + 显式挂的全局类。
+  另：视觉层（姿态幅度、道具像素位置、光影）需在浏览器里肉眼逐项调，本次只保证构建绿 +
+  StyleGallery 可静态预览全 12 状态首帧，精细视觉验收交人工过一遍。
+
+
+## 2026-07-03 R1 复审修复 · F1（代码区污染 + 渲染记忆化）
+
+- 做了什么：① 角标转换从字符串正则预处理改为 remark AST 插件 `remarkCitations`——
+  只改写 mdast 的 text 节点，天然跳过代码（inlineCode/code 是独立节点类型）；删除
+  `linkifyCitations`。② 单条消息抽成 `React.memo` 的 `MessageItem` 子组件，components
+  覆写用 useMemo 按 citations/onCitationClick 缓存。
+
+- 为什么需要：① 字符串层全局替换会污染回答里的代码——行内 `arr[0]`、围栏代码块中的
+  `a[3]` 会被替成 `[[0]](#cite-0)` 原样显示；本产品常答技术问题、代码频出。② 原实现每次
+  渲染都全量重跑 linkify/buildComponents，点一次角标 → activeChunkId 变 → 整个会话所有
+  消息重新解析 Markdown，会话一长就卡。
+
+- 为什么这么做：AST 插件是"跳过代码"的正解（代码在 mdast 里就是非 text 节点，遍历 text
+  即绕开），比"按反引号分段"的字符串 hack 稳。用 mdast-util-from-markdown 实测：散文
+  `[1][2]` 成 `#cite-1/2` 链接，`arr[0]`/`a[3]` 代码原文保留不变。memo 子组件靠
+  onCitationClick（useState setter，稳定）+ message 引用稳定，点角标只更新 activeChunkId
+  时各条 props 未变 → 跳过重渲染。插件返回的 transformer 参数用 unknown 收口，规避
+  MdNode 与 unist Node 的函数逆变类型摩擦。
+
+- 踩了什么坑：无（build 绿；插件行为经离线 mdast 解析验证）。
+
+
+## 2026-07-03 R1 复审修复 · F2（切换丢高亮 + 空白提示）
+
+- 做了什么：① 搜索高亮 effect 依赖从 `[searchTerm]` 补成 `[searchTerm, graphData,
+  hideIsolated]`；② 新增 `visibleNodeCount`/`allHidden`，当有实体但可见节点为 0（全孤立
+  且开关开着）时画布显示提示，画布挂载条件从 `nodes.length>0` 收紧为 `visibleNodeCount>0`。
+
+- 为什么需要：① cy 实例随 `hideIsolated` 重建，但高亮 effect 只依赖 searchTerm，重建后
+  高亮丢失、搜索框却仍有词，视觉与状态不一致。② 全孤立/少边图在默认隐藏下画布空白且
+  无解释，右侧实体列表却满员，用户会以为坏了。
+
+- 为什么这么做：① 给高亮 effect 补重建信号依赖后，切换开关 → cy-build effect 先重建
+  实例（声明在前）→ 高亮 effect 后重跑复算，顺序天然正确。② 空态提示走既有 statusMsg
+  样式，文案点明"N 个实体都是孤立点、可关开关查看"，把静默空白变成可解释状态。
+
+- 踩了什么坑：无（build 绿）。effect 声明顺序保证 cy 重建先于高亮复算。
+
+
+## 2026-07-03 R1 复审修复 · F3（技能驱动的系统性视觉升级）
+
+- 做了什么：调 ui-ux-pro-max 技能拿方向（命中 Pixel Art + Modern-Dark/Cinema +
+  night-indigo/dream-violet 配色），据此给 AgentRoom 做一套系统性"夜间小剧场"视觉方案：
+  ① 光影分层——左侧桌区暖光池(琥珀 `--room-lamp`)作角色主光、顶部环境紫辉、底边暗角，
+  与冷紫房间成暖冷对比；② 一团 12s 缓慢漂移的环境紫辉光晕(`.canvas::before`)给房间"呼吸"
+  纵深；③ 背墙档案架剪影(`.canvas::after`)暗示身后一整室档案；④ 家具顶缘统一细高光
+  (`--room-rim`)做材质一致；⑤ 像素角色卫衣改三段受光（左 d 暗面 / 中 b 主色 / 右 B 高光）
+  造圆柱体积。新增语义光影 token（`--room-ambient/lamp/rim/shelf`、`--dude-body-lo`）。
+
+- 这是什么：把"深紫小剧场"从一层平背景升级为**多层光照**——主光(暖)/环境光(紫)/暗角，
+  是电影布光的基本盘（key light + ambient + vignette）。角色的三段受光是像素画塑形常法：
+  同一色相拉出暗面→主色→高光三档，物体就有了体积。
+
+- 为什么需要：R1 评审指出上一版只加了暗角+姿态动画，未见"技能驱动的系统性视觉方案"，
+  与清单点名的"用 ui-ux-pro-max 做房间与小人视觉做精"不符。质量基线（档案管理员人设、
+  高级精致、深紫小剧场对比浅色工作台）要真正立住，靠的是布光与材质统一，不是零散点缀。
+
+- 为什么这么做：暖冷对比（琥珀角色主光 vs 冷紫房间）是让浅色小人从深底"浮起来"最省力的
+  一招，暖光同时呼应小人橙卫衣；环境光用漂移光晕而非静态，给静置画面一点生命；家具顶缘
+  统一高光是"同一房间同一光照"的材质锚。全部走语义 token（技能强调 color-semantic，
+  不在组件里散落 hex）。像素塑形只动 COLOR/PATTERN 两个常量（drawDude 的既定约定）。
+
+- 踩了什么坑：无（build 绿）。像素级观感（暗面色深浅、光晕位置/强度、家具高光是否过亮）
+  需在浏览器/StyleGallery 里肉眼逐项微调——本次给出的是成体系的可执行底座与语义 token，
+  精细数值留人工按真实渲染收敛（评审已约定视觉验收由人肉眼过）。

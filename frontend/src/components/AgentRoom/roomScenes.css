@@ -1,25 +1,195 @@
 /* ────────────────────────────────────────────────────────────
-   AgentRoom · 场景叙事：道具运转（全局 CSS，非 module）
+   AgentRoom · 演出层（全局 CSS，非 module）
    ────────────────────────────────────────────────────────────
-   机制：小人位置由 useAgentPosition 的 rAF 逐帧插值驱动（中断即转，
-        不在此文件控制 left）。本文件只管：① 道具按 [data-stage] 显隐/运转；
-        ② error 状态小人抖动（覆盖 bob 动画）。
-   道具 DOM 常驻（AgentRoom.tsx 里写死全局 class 名，不经 styles hash）。
-   注：文档处理各 stage（uploading/parsing/extracting/indexing/deleting/
-   rebuilding）的道具已删除——AgentRoom 只订阅问答 Run，这些 stage 的真实
-   事件从不到达本组件，保留会违反"动画必须来自真实 RunEvent"红线。
+   机制：小人位置由 useAgentPosition 的 rAF 插值驱动（中断即转，不在此控 left）；
+        微动作写在 canvas 的 data-action 上，本文件据 [data-action] 渲染小人姿态与
+        道具（手持文件 / zzz 气泡 / 连线 / 放大镜）。stage 相关（error）用 [data-stage]。
+
+   选择器命中说明（重要）：
+     元素用 CSS Module 哈希类名，全局文件里的裸 `.canvas`/`.dude` 命不中它们。
+     故本文件一律用「属性选择 [data-action]/[data-stage] + 全局类」命中：
+       - 小人：全局类 .ar-dude（AgentRoom.tsx 与哈希类并挂）
+       - 红光：全局类 .ar-err
+       - 道具：全局类 .p-link / .p-glass / .p-doc / .p-zzz
+     data-action/data-stage 是普通属性，[属性] 选择器不依赖元素类名，天然命中。
+
+   红线：data-action 只是 stage 内部的表现层编排，stage 本身只来自真实 RunEvent。
    ──────────────────────────────────────────────────────────── */
 
-/* ═══ 道具运转（按 data-stage 激活）═══ */
+/* ═══ 小人姿态（按 data-action，命中全局类 .ar-dude）═══ */
 
-/* 道具基础：默认隐藏，按 stage 显示。单个道具的定位/外观在各自 .p-xxx 里。 */
+/* 旋转/伸缩以脚部为支点，才像"倾身/低头"而非整体歪。origin 取图形底部中心附近。 */
+.ar-dude {
+  transform-origin: 10px 20px;
+}
+
+/* idle 呼吸：平缓起伏（比 module 基线 ar-bob 更慢，静置时更沉稳）*/
+[data-action='idle-breathe'] .ar-dude {
+  animation: ar-breathe 2.4s ease-in-out infinite;
+}
+
+/* 走 / 搬文件走：轻快起伏 + 小幅左右摆，像迈步 */
+[data-action='walk'] .ar-dude,
+[data-action='carry'] .ar-dude {
+  animation: ar-walk 0.36s ease-in-out infinite;
+}
+
+/* 打字：微前倾 + 快速小啄（在桌前敲键盘）*/
+[data-action='type'] .ar-dude {
+  animation: ar-type 0.26s ease-in-out infinite;
+}
+
+/* 翻阅 / 翻页核对：低头看文件，缓慢起伏 */
+[data-action='read'] .ar-dude,
+[data-action='flip'] .ar-dude {
+  animation: ar-read 1.1s ease-in-out infinite;
+}
+
+/* 档案柜前翻找：侧身朝柜子探找 */
+[data-action='rummage'] .ar-dude {
+  animation: ar-rummage 0.7s ease-in-out infinite;
+}
+
+/* 连线台前比划：来回摆动像挥手连线 */
+[data-action='gesture'] .ar-dude {
+  animation: ar-gesture 0.8s ease-in-out infinite;
+}
+
+/* 喝咖啡：periodically 后仰啜一口 */
+[data-action='drink'] .ar-dude {
+  animation: ar-drink 2.4s ease-in-out infinite;
+}
+
+/* 发呆：极缓起伏，几乎不动 */
+[data-action='daze'] .ar-dude {
+  animation: ar-daze 3s ease-in-out infinite;
+}
+
+/* 打瞌睡：歪头 + 极缓，配 zzz 气泡 */
+[data-action='doze'] .ar-dude {
+  animation: ar-doze 3.4s ease-in-out infinite;
+}
+
+/* 挠头：快速小幅抖动 */
+[data-action='scratch'] .ar-dude {
+  animation: ar-scratch 0.3s ease-in-out infinite;
+}
+
+/* 伸懒腰：短暂纵向拉伸上探 */
+[data-action='stretch'] .ar-dude {
+  animation: ar-stretch 1.1s ease-in-out infinite;
+}
+
+@keyframes ar-breathe {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+@keyframes ar-walk {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-3px) rotate(3deg); }
+}
+@keyframes ar-type {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(-1px) rotate(-4deg); }
+}
+@keyframes ar-read {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-2px) rotate(-2deg); }
+}
+@keyframes ar-rummage {
+  0%, 100% { transform: translateY(0) rotate(6deg); }
+  50% { transform: translateY(-2px) rotate(10deg); }
+}
+@keyframes ar-gesture {
+  0%, 100% { transform: translateY(-1px) rotate(-6deg); }
+  50% { transform: translateY(-1px) rotate(6deg); }
+}
+@keyframes ar-drink {
+  0%, 70%, 100% { transform: translateY(0) rotate(0deg); }
+  85% { transform: translateY(-1px) rotate(-9deg); }
+}
+@keyframes ar-daze {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+@keyframes ar-doze {
+  0%, 100% { transform: translateY(0) rotate(-12deg); }
+  50% { transform: translateY(-1px) rotate(-12deg); }
+}
+@keyframes ar-scratch {
+  0%, 100% { transform: translateY(0) rotate(-5deg); }
+  50% { transform: translateY(0) rotate(5deg); }
+}
+@keyframes ar-stretch {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50% { transform: translateY(-3px) scaleY(1.16); }
+}
+
+/* ═══ 小人随身道具（.ar-dude 的子元素，随小人移动）═══ */
+
+/* 手持文件：搬运/翻阅/核对段显示，位于身侧手中 */
+.p-doc {
+  position: absolute;
+  left: 17px;
+  bottom: 2px;
+  width: 8px;
+  height: 10px;
+  background: var(--prop-doc);
+  border: 1px solid var(--prop-doc-line);
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+/* 纸上行纹 */
+.p-doc::before {
+  content: '';
+  position: absolute;
+  inset: 2px 1px;
+  background: repeating-linear-gradient(
+    180deg,
+    var(--prop-doc-line) 0 1px,
+    transparent 1px 3px
+  );
+  opacity: 0.7;
+}
+[data-action='carry'] .p-doc,
+[data-action='read'] .p-doc,
+[data-action='flip'] .p-doc {
+  opacity: 1;
+}
+
+/* zzz 气泡：打瞌睡时头顶升起的 z */
+.p-zzz {
+  position: absolute;
+  left: 15px;
+  bottom: 22px;
+  color: var(--room-dim);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+}
+[data-action='doze'] .p-zzz {
+  animation: ar-zzz 2s ease-out infinite;
+}
+@keyframes ar-zzz {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.8); }
+  30% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate(4px, -12px) scale(1.1); }
+}
+
+/* ═══ 场地道具（.props 内的全局类，绝对定位在画布）═══ */
+
+/* 道具基础：默认隐藏，按 data-action 显示。 */
 .prop {
   position: absolute;
   opacity: 0;
   transition: opacity 0.25s;
 }
 
-/* linking：两节点连线生长（打印机上方）*/
+/* 连线生长（连线台上方）：linking 的 gesture 动作时显示 */
 .p-link {
   left: 160px;
   bottom: 96px;
@@ -30,7 +200,7 @@
 }
 .p-link::before,
 .p-link::after {
-  content: "";
+  content: '';
   position: absolute;
   top: -3px;
   width: 7px;
@@ -40,7 +210,7 @@
 }
 .p-link::before { left: -3px; }
 .p-link::after { right: -3px; }
-.canvas[data-stage="linking"] .p-link {
+[data-action='gesture'] .p-link {
   opacity: 1;
   animation: ar-grow 1s ease-in-out infinite;
 }
@@ -50,7 +220,7 @@
   100% { opacity: 0; transform: scaleX(0); }
 }
 
-/* searching：放大镜（档案柜前扫描）*/
+/* 放大镜（档案柜前）：searching 的 rummage 动作时扫描 */
 .p-glass {
   right: 78px;
   bottom: 84px;
@@ -61,7 +231,7 @@
   background: rgba(110, 195, 255, 0.12);
 }
 .p-glass::after {
-  content: "";
+  content: '';
   position: absolute;
   bottom: -6px;
   right: -2px;
@@ -70,7 +240,7 @@
   background: var(--room-cyan);
   transform: rotate(-45deg);
 }
-.canvas[data-stage="searching"] .p-glass {
+[data-action='rummage'] .p-glass {
   opacity: 1;
   animation: ar-glass-scan 1.6s ease-in-out infinite;
 }
@@ -79,16 +249,16 @@
   50% { opacity: 1; transform: translateX(6px); }
 }
 
-/* ═══ error：红光闪烁 + 小人抖动 ═══ */
-.canvas[data-stage="error"] .pErr {
+/* ═══ error：红光闪烁 + 小人抖动（按 [data-stage=error]）═══
+   放在小人姿态规则之后，使 error 时抖动盖过 idle-breathe 姿态（同优先级、后者胜）。 */
+[data-stage='error'] .ar-err {
   animation: ar-err-flash 0.5s ease-in-out 3;
 }
 @keyframes ar-err-flash {
   0%, 100% { opacity: 0.3; }
   50% { opacity: 1; }
 }
-/* error 状态小人抖动（覆盖 busy 动画）*/
-.canvas[data-stage="error"] .dude {
+[data-stage='error'] .ar-dude {
   animation: ar-shake 0.3s ease-in-out 4;
 }
 @keyframes ar-shake {

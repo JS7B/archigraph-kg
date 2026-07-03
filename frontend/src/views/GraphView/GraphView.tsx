@@ -1,16 +1,39 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import cytoscape from 'cytoscape'
 import type { ElementDefinition } from 'cytoscape'
+import fcose from 'cytoscape-fcose'
 import { Button, Card, Chip, DataValue, Eyebrow, Panel } from '../../components/ui'
 import { ApiError } from '../../api/client'
 import { fetchGraph } from '../../api/graph'
 import type { GraphData, GraphEdge, GraphNode } from '../../types'
 import styles from './GraphView.module.css'
 
+// 注册 fcose 布局（大图布局质量明显优于内置 cose）。模块级注册一次即可。
+cytoscape.use(fcose)
+
 interface NodeRelation {
   edge: GraphEdge
   otherNode: GraphNode
   direction: 'outgoing' | 'incoming'
+}
+
+// 节点度数：后端 degree 字段优先，未就绪时用 edges 本地计数兜底。
+// 这是「后端字段到位后一处切换」的唯一位置——?? 一旦拿到 degree 即自动改用。
+function nodeDegree(node: GraphNode, edges: GraphEdge[]): number {
+  if (typeof node.degree === 'number') return node.degree
+  return edges.reduce(
+    (count, edge) => count + (edge.source === node.id || edge.target === node.id ? 1 : 0),
+    0,
+  )
+}
+
+// 度数分档（3 可见档 + 孤立档，不做连续插值）：驱动节点尺寸与颜色深浅。
+type DegreeTier = 'iso' | 'low' | 'mid' | 'hi'
+function degreeTier(degree: number): DegreeTier {
+  if (degree === 0) return 'iso'
+  if (degree <= 2) return 'low'
+  if (degree <= 5) return 'mid'
+  return 'hi'
 }
 
 // 关系查找：接受 graphData 参数（替代旧的模块级 mockGraph 依赖）。
@@ -82,6 +105,43 @@ const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
       'overlay-opacity': 0,
     },
   },
+  // 度数分档：孤立=灰小（噪声观感）→ 高度数=深大（核心突出）。颜色为靛紫由浅到深。
+  {
+    selector: 'node.deg-iso',
+    style: {
+      'background-color': '#cbd5e1', // --color-border-strong（灰，弱化噪声点）
+      'border-color': '#e2e8f0',
+      width: 34,
+      height: 34,
+      'font-size': 9,
+    },
+  },
+  {
+    selector: 'node.deg-low',
+    style: {
+      'background-color': '#a5b4fc', // 靛紫 300
+      width: 46,
+      height: 46,
+    },
+  },
+  {
+    selector: 'node.deg-mid',
+    style: {
+      'background-color': '#6366f1', // --color-accent
+      width: 60,
+      height: 60,
+    },
+  },
+  {
+    selector: 'node.deg-hi',
+    style: {
+      'background-color': '#4338ca', // --color-accent-active（最深，核心实体）
+      'border-color': '#e0e7ff',
+      width: 78,
+      height: 78,
+      'font-size': 12,
+    },
+  },
   {
     selector: 'node:selected',
     style: {
@@ -118,6 +178,8 @@ export function GraphView() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  // 隐藏孤立节点（度数为 0），默认开：孤立点是噪声观感主源，一键切回全貌。不持久化。
+  const [hideIsolated, setHideIsolated] = useState(true)
 
   // 拉取全图（套 LibraryView 的 refresh + useEffect 模式，补自建 loading flag）。
   const refresh = useCallback(async () => {
@@ -138,15 +200,36 @@ export function GraphView() {
     void refresh()
   }, [refresh])
 
-  // Cytoscape elements 由 graphData 派生（数据到位才有图）。
+  // Cytoscape elements 由 graphData 派生：附度数分档 class；隐藏孤立时滤掉度数 0 的点
+  // 及其悬挂边（两端都需可见）。
   const graphElements: ElementDefinition[] = useMemo(() => {
     if (!graphData) return []
+    const withDegree = graphData.nodes.map((node) => ({
+      node,
+      degree: nodeDegree(node, graphData.edges),
+    }))
+    const visibleNodes = hideIsolated ? withDegree.filter(({ degree }) => degree > 0) : withDegree
+    const visibleIds = new Set(visibleNodes.map(({ node }) => node.id))
     return [
-      ...graphData.nodes.map((node) => ({ data: { id: node.id, label: node.label } })),
-      ...graphData.edges.map((edge) => ({
-        data: { id: edge.id, source: edge.source, target: edge.target, label: edge.relationType },
+      ...visibleNodes.map(({ node, degree }) => ({
+        data: { id: node.id, label: node.label, degree },
+        classes: `deg-${degreeTier(degree)}`,
       })),
+      ...graphData.edges
+        .filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
+        .map((edge) => ({
+          data: { id: edge.id, source: edge.source, target: edge.target, label: edge.relationType },
+        })),
     ]
+  }, [graphData, hideIsolated])
+
+  // 实体列表按度数降序（核心实体置顶）；带度数供列表展示。列表始终含全部节点
+  // （键盘可达路径不因隐藏孤立点而丢失，孤立点自然沉到列表末尾）。
+  const rankedNodes = useMemo(() => {
+    if (!graphData) return []
+    return graphData.nodes
+      .map((node) => ({ node, degree: nodeDegree(node, graphData.edges) }))
+      .sort((a, b) => b.degree - a.degree)
   }, [graphData])
 
   const selectedRelations = useMemo(
@@ -163,13 +246,16 @@ export function GraphView() {
       elements: graphElements,
       style: cytoscapeStylesheet,
       layout: {
-        name: 'cose',
+        name: 'fcose',
+        quality: 'proof',
         animate: false,
+        randomize: true,
         fit: true,
         padding: 48,
-        nodeRepulsion: 8000,
+        nodeSeparation: 120,
         idealEdgeLength: 110,
-      },
+        nodeRepulsion: 8000,
+      } as unknown as cytoscape.LayoutOptions,
       minZoom: 0.55,
       maxZoom: 2.2,
       wheelSensitivity: 0.15,
@@ -195,9 +281,9 @@ export function GraphView() {
       cy.destroy()
       cyRef.current = null
     }
-    // graphElements 由 graphData 派生，依赖 graphData 即可覆盖数据变化重建。
+    // graphElements 由 graphData/hideIsolated 派生，二者变化即重建并重新布局。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphData])
+  }, [graphData, hideIsolated])
 
   // 搜索高亮：仍在已渲染的 Cytoscape 实例上做前端 filter（体验好，不发请求）。
   useEffect(() => {
@@ -222,9 +308,22 @@ export function GraphView() {
     edges.addClass('searchDimmed')
     matchingNodes.addClass('searchMatch')
     matchingNodes.connectedEdges().removeClass('searchDimmed')
-  }, [searchTerm])
+    // 依赖含 graphData/hideIsolated：cy 实例随二者重建后，本 effect 重跑复算高亮，
+    // 否则切换「隐藏孤立节点」重建实例会丢掉搜索高亮（搜索框却仍有词）。
+  }, [searchTerm, graphData, hideIsolated])
 
   const isEmpty = !loading && !loadError && graphData && graphData.nodes.length === 0
+
+  // 当前画布可见节点数（隐藏孤立时 = 度数 > 0 的节点数）。用于"全被隐藏"的空态提示。
+  const visibleNodeCount = useMemo(() => {
+    if (!graphData) return 0
+    if (!hideIsolated) return graphData.nodes.length
+    return graphData.nodes.filter((node) => nodeDegree(node, graphData.edges) > 0).length
+  }, [graphData, hideIsolated])
+
+  // 有实体、但当前可见节点为 0（全孤立且开关开着）：画布会空白，需给出解释而非静默。
+  const allHidden =
+    !loading && !loadError && !!graphData && graphData.nodes.length > 0 && visibleNodeCount === 0
 
   return (
     <section className={styles.graphView}>
@@ -244,8 +343,15 @@ export function GraphView() {
         {isEmpty && (
           <div className={styles.statusMsg}>知识库还没有实体。上传文档并完成入库后，这里会显示实体与关系。</div>
         )}
-        {/* 数据就绪才挂载 Cytoscape 容器，避免空容器闪烁 */}
-        {!loading && !loadError && graphData && graphData.nodes.length > 0 && (
+        {/* 全部实体都是孤立点、被默认隐藏：画布会空白，给出提示而非静默空白 */}
+        {allHidden && (
+          <div className={styles.statusMsg}>
+            {graphData!.nodes.length} 个实体当前都是孤立点（无关系连边），已按「隐藏孤立节点」默认隐藏。
+            关闭右侧开关可查看全部。
+          </div>
+        )}
+        {/* 数据就绪且有可见节点才挂载 Cytoscape 容器，避免空容器闪烁 */}
+        {!loading && !loadError && visibleNodeCount > 0 && (
           <>
             <div ref={containerRef} className={styles.canvas} />
             <div className={styles.canvasNote}>拖拽移动画布，滚轮缩放，点击节点查看详情。</div>
@@ -280,6 +386,15 @@ export function GraphView() {
             </Button>
           </div>
           <span className={styles.searchHint}>输入名称会高亮匹配节点，并弱化其他图谱元素。</span>
+          <label className={styles.toggleRow}>
+            <input
+              type="checkbox"
+              className={styles.toggleInput}
+              checked={hideIsolated}
+              onChange={(event) => setHideIsolated(event.target.checked)}
+            />
+            <span className={styles.toggleText}>隐藏孤立节点（度数为 0 的噪声实体）</span>
+          </label>
         </Card>
 
         <Panel className={styles.detailPanel} eyebrow="Entity Detail" title="实体详情">
@@ -320,10 +435,11 @@ export function GraphView() {
               <p className={styles.emptyCopy}>
                 点击图中节点，或用下方列表选择实体查看详情（可键盘 Tab/方向键访问）。
               </p>
-              {/* F5 无障碍：Cytoscape canvas 节点不可键盘访问，并行提供按钮列表作为可达路径。 */}
-              {graphData && graphData.nodes.length > 0 ? (
+              {/* F5 无障碍：Cytoscape canvas 节点不可键盘访问，并行提供按钮列表作为可达路径。
+                  F2：按度数降序，每项带类型 Chip 与度数。 */}
+              {rankedNodes.length > 0 ? (
                 <ul className={styles.entityList} aria-label="实体列表">
-                  {graphData.nodes.map((node) => (
+                  {rankedNodes.map(({ node, degree }) => (
                     <li key={node.id}>
                       <button
                         type="button"
@@ -331,7 +447,12 @@ export function GraphView() {
                         onClick={() => setSelectedNode(node)}
                       >
                         <span className={styles.entityListLabel}>{node.label}</span>
-                        <Chip tone="accent">{node.entityType}</Chip>
+                        <span className={styles.entityListMeta}>
+                          <Chip tone="accent">{node.entityType}</Chip>
+                          <span className={styles.entityDegree} title="图内度数">
+                            {degree}
+                          </span>
+                        </span>
                       </button>
                     </li>
                   ))}
