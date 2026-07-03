@@ -1,6 +1,34 @@
 # 交接清单（前端工人 · feat/frontend）：回答区 Markdown 化 + 图谱展示分级 + AgentRoom 生命感
 
 > 大脑 2026-07-03 签发，设计规格见 `docs/superpowers/specs/2026-07-03-experience-upgrade-design.md`。
+
+## 评审反馈 R1（2026-07-03，针对 5b81bf2 / aeb4f79 / 49e75ef）
+
+三个提交清单项基本全部达成，工程实现质量好（行为状态机生命周期、死选择器修复、
+悬挂边过滤等均正确），**但以下 5 项修复后才合并**。修复在 feat/frontend 追加 commit，
+完成后通知大脑复审：
+
+1. **[F1·必修] 代码区内 `[n]` 被误替换**：`linkifyCitations` 在字符串层全局替换，
+   行内代码 `` `arr[0]` `` 与围栏代码块里的数字方括号会被污染成 `[[0]](#cite-0)` 原样显示。
+   本产品回答技术问题，代码出现频率不低。修法：预处理时跳过反引号代码区
+   （按 `` ` ``/``` 分段只处理非代码段），或改 remark AST 插件遍历 text 节点。
+2. **[F1·必修] 渲染记忆化**：`linkifyCitations`/`buildMarkdownComponents` 每次渲染全量重跑，
+   点一次角标 → 整个会话所有消息重新解析 Markdown。按 `bodyText`/`citations` useMemo，
+   或把单条消息抽成 `React.memo` 子组件。
+3. **[F2·必修] 切换「隐藏孤立节点」丢搜索高亮**：cy 实例随 `hideIsolated` 重建，
+   搜索 effect 依赖只有 `[searchTerm]`，重建后高亮消失但搜索框仍有词。
+   给搜索 effect 补重建信号依赖，或重建后复算一次高亮。
+4. **[F2·必修] 可见节点为空时静默空白**：全孤立/少边图在默认隐藏下画布空白且无解释，
+   右侧列表却满员。可见节点数为 0 且总节点数 > 0 时，画布区显示提示
+   （如「N 个孤立实体已隐藏，关闭开关查看」）。
+5. **[F3·必修] 补技能驱动的视觉升级**：清单点名「调用 ui-ux-pro-max / frontend-design
+   技能对房间与小人做一轮视觉做精」，本次仅加了暗角柔光+姿态动画，未见技能驱动的
+   系统性视觉方案。请补做（质量基线不变：档案管理员人设、高级精致、深紫小剧场）。
+
+可延后项（不阻合并，记入后续）：F1 引用芯片 aria-label 补文档来源信息；F2 搜索命中
+被隐藏节点时的反馈、自环/重边度数口径、toggle 重排 `randomize` 跳变；F3 StyleGallery
+预览微动画与「静态首帧」措辞出入、非 idle 初始 stage 一帧闪跳（useLayoutEffect）、
+`sceneMap.detail` 死字段清理。
 > 开工前：① 把最新 main 合进 feat/frontend（依赖 main 上的依赖安装提交与 `6d0d778`）；
 > ② 在 worktree 里重新 `npm install`（react-markdown / remark-gfm / cytoscape-fcose
 > 已进 package.json，worktree 的 node_modules 需自行同步）。
