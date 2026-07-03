@@ -22,21 +22,22 @@ const COLOR: Record<string, string> = {
   e: 'var(--dude-eye)',   // 眼睛/瞳
   g: 'var(--dude-glass)', // 眼镜框（档案员辨识特征）
   b: 'var(--dude-body)',  // 卫衣主色（橙，焦点色）
-  B: 'var(--dude-body-hi)', // 卫衣高光（粉，体积感）
+  B: 'var(--dude-body-hi)', // 卫衣高光（粉，右侧受光强侧）
+  d: 'var(--dude-body-lo)', // 卫衣暗面（左侧受光弱侧）
   l: 'var(--dude-leg)',   // 腿
 }
 
 // 8列×8行 像素图案。字符：. 透明 | 其余见 COLOR。
 // 第4行 .gseseg. —— g 眼镜框框住 e 眼睛（左 g-s-e-s-e-g 右）。
-// 第6行 .bbBBbb. —— B 高光放在右侧两列，造体积。
+// 卫衣两行做三段受光：左列 d 暗面 → 中 b 主色 → 右 B 高光，造圆柱体积（视觉升级）。
 const PATTERN: string[] = [
   '...hh...',
   '..hhhh..',
   '..hsssh.', // 额发 + 脸
   '..gsesg.', // 眼镜框 + 眼（g 框住 e）
   '..sssss.', // 脸下半
-  '..bbBBb.', // 卫衣（右半 B 高光造体积）
-  '..bbbbb.',
+  '..dbBBb.', // 卫衣（左 d 暗面 / 右 B 高光，三段受光造体积）
+  '..dbbbb.',
   '..ll.ll.', // 腿（悬浮，短腿）
 ]
 

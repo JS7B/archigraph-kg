@@ -16,17 +16,54 @@
 }
 
 /* 画布：固定高度，承载所有场景元素，relative 定位锚。
-   背景分层做"夜间小剧场"纵深：顶部一束柔光（吊灯/追光）+ 底边暗角（vignette）
-   叠在深紫渐变上，让浅色小人与家具从深底里浮起来。 */
+   夜间小剧场光影分层（视觉升级，取向参考 ui-ux-pro-max 的 Cinema/Dark + dream-violet）：
+     ① 左侧桌区一束暖光池（琥珀）——角色工作处的"主光"，与冷紫房间成暖冷对比；
+     ② 顶部环境紫辉追光；③ 底边暗角(vignette)收边。三层叠在深紫渐变底上，
+   让浅色小人与家具从深底里"浮"起来。 */
 .canvas {
   position: relative;
   height: 220px;
   overflow: hidden;
   background:
-    radial-gradient(120% 78% at 50% -12%, rgba(193, 158, 255, 0.18), transparent 55%),
-    radial-gradient(100% 90% at 50% 118%, rgba(0, 0, 0, 0.38), transparent 60%),
+    radial-gradient(58% 42% at 24% 44%, var(--room-lamp), transparent 62%),
+    radial-gradient(120% 72% at 50% -12%, var(--room-ambient), transparent 58%),
+    radial-gradient(100% 90% at 50% 118%, rgba(0, 0, 0, 0.4), transparent 60%),
     linear-gradient(180deg, var(--room-top) 0%, var(--room-bot) 100%);
   image-rendering: pixelated;
+}
+
+/* 环境紫辉：一团缓慢漂移的光晕，给房间"呼吸"的纵深（低透明、12s 往返；
+   reduced-motion 时 global.css 会把动画停成静态，仍是一团柔光，不闪）。 */
+.canvas::before {
+  content: "";
+  position: absolute;
+  left: 26%;
+  top: 8%;
+  width: 130px;
+  height: 84px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--room-ambient), transparent 70%);
+  z-index: 0;
+  pointer-events: none;
+  animation: ar-ambient 12s ease-in-out infinite alternate;
+}
+@keyframes ar-ambient {
+  0% { transform: translateX(-22px); opacity: 0.75; }
+  100% { transform: translateX(28px); opacity: 1; }
+}
+
+/* 背墙档案架剪影：上半墙面淡淡的竖向分隔，暗示身后是一整室档案（构图纵深）。
+   z-index:0 落在底（地面 z1 / 家具 z2 之下），只作背景层。 */
+.canvas::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 118px;
+  background: repeating-linear-gradient(90deg, transparent 0 26px, var(--room-shelf) 26px 28px);
+  z-index: 0;
+  pointer-events: none;
 }
 
 /* ── 常驻家具带（5 个工位，横向排开；DOM 常驻，z-index 2 低于小人 4）──
@@ -238,6 +275,15 @@
   height: 3px;
   background: #0d0a16;
   border-radius: 1px;
+}
+
+/* 家具材质统一：各工位顶缘统一一道细高光，像被环境光打亮的上边，
+   让木质桌 / 金属机具在同一套光照下读起来是"同一个房间的家具"（视觉升级）。 */
+.desk,
+.printer,
+.cabinet,
+.shredder {
+  box-shadow: inset 0 1px 0 var(--room-rim);
 }
 
 /* 门牌：工作区/任务名 */
