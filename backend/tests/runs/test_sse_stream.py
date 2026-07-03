@@ -51,3 +51,6 @@ def test_sse_stream_format(monkeypatch):
     assert "succeeded" in body
     # 终态事件应带 answer
     assert "ok" in body
+    # 事件应携带 seq 序号（前端断线重连去重的依据）
+    assert '"seq": 1' in body
+    assert '"seq": 2' in body

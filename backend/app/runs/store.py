@@ -47,10 +47,15 @@ class RunStore:
         return self._runs.get(run_id)
 
     def append_event(self, run_id: str, event: RunEvent) -> None:
-        """记录事件到历史，并向所有订阅者投递副本。Run 终态即随事件更新。"""
+        """记录事件到历史，并向所有订阅者投递副本。Run 终态即随事件更新。
+
+        seq 在此统一赋值（Run 内 1 起递增）：前端断线重连时 subscribe 会回放
+        全部历史，前端按 seq 去重即可安全消费重复投递。
+        """
         run = self._runs.get(run_id)
         if run is None:
             raise KeyError(f"Run 不存在: {run_id}")
+        event.seq = len(run.events) + 1
         run.events.append(event)
         if event.status in (RunStatus.SUCCEEDED, RunStatus.FAILED):
             run.status = event.status

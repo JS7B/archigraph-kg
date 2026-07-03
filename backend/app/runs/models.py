@@ -57,6 +57,9 @@ class RunEvent(BaseModel):
     status: RunStatus = RunStatus.RUNNING
     message: str = ""
     answer: dict | None = None
+    # 事件序号：append_event 时按 Run 内顺序赋 1 起递增值。前端断线重连后
+    # 后端会回放全部历史，前端靠 seq 去重（只消费 seq 大于已见最大值的事件）。
+    seq: int = 0
     # 可观测字段（B12）：agent 工具调用时附带，让"可观测"从模糊变精确
     tool_name: str | None = None
     tool_input: dict | None = None

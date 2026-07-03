@@ -435,6 +435,7 @@
 
 - 边界（讲清楚，避免误用）：
   - mock 模式下提问会失败（后端未就绪），这是预期的——mock 只打通会话 UI 流。
+    （后记：后端就绪后 USE_MOCK 已改 false 并删除整段 mock 数据，本条记的是 mock 阶段的工作。）
   - 终态后只清 chatRunId 解除 busy，不清 conversationId（关键，否则追问会断）。
   - refreshList 在终态后调用刷新侧边栏 messageCount/title，可能有轻微闪烁，可接受。
 
@@ -464,3 +465,68 @@
 
 - 边界：sceneMap 的 label/detail 不删（busy 仍驱动 data-busy 动画，只是不再显示文字）。
   红线守：AgentRoom 的 stage 仍只来自真实 RunEvent，events 仅驱动下方轨迹显示。
+
+## 2026-07-02 [未解决] 长任务 SSE 终态事件在浏览器端丢失
+
+> ⚠️ 此条曾误记为「已修复（断线自愈 + seq 去重 + 历史兜底）」，但实测问题依旧。
+> sse.ts 曾尝试上述三种容错手段（放行 EventSource 原生重连、按 seq 去重、onerror
+> 历史兜底），经真实浏览器验证**均无效**——浏览器 EventSource 仍收不到终态事件。
+> 那段容错代码及相关验证已从 sse.ts 移除，恢复到简单实现，问题回到「未解决」状态。
+> 以下重记为客观问题描述，供后续诊断参考。
+
+- 做了什么：**问题未解决**。本次仅做诊断，把范围缩小到「浏览器 EventSource 收不到
+  终态事件」，但根因未定位。临时绕过手段：文档库加「刷新列表」按钮、图谱视图加
+  「刷新图谱」按钮，用户手动点按钮可拉到数据（绕开 SSE 自动刷新）。
+
+- 这是什么：**入库/删除任务完成后，前端收不到完成信号**。后台任务（Run）通过 SSE
+  流推送进度事件，任务结束时发一条 `idle/succeeded`（或 `error/failed`）终态事件。
+  前端依赖这条终态事件触发列表刷新。现在这条终态事件到不了浏览器。
+
+- 现象（稳定复现）：
+  1. 入库/删除实际**成功**（Neo4j 数据正确写入/删除，手动刷新页面或直查 API 可确认）。
+  2. 前端进度指示**永远停在最后一个 running 事件**（如「抽取实体与关系」）。
+  3. 文档库列表不自动刷新；新文档不出现 / 已删文档不消失，必须手动刷新页面。
+  4. RunEvent 时间线、像素 Agent 房间也停在中间状态，不归位 idle。
+
+- 已确凿的证据（后端没问题）：
+  - 用 Python `requests` 流式读 `/api/runs/{id}/events/stream`，能**完整收到全部
+    事件含终态**（6 条，最后一条 `idle/succeeded`）。即后端 SSE 推送了终态。
+  - 后端历史接口 `/api/runs/{id}/events` 返回完整 6 条事件，终态在历史记录中。
+  - 前端 LibraryView 的终态处理逻辑（useEffect 监听 events，收到 succeeded 调
+    refresh）**代码本身正确**，无逻辑错误。
+
+- 真实断点：在 LibraryView 加 console.log，用户实测：
+  ```
+  events.len= 4 last= indexing / running      ← 收到第 4 条
+  终态useEffect触发, last.status= running      ← 之后无新事件
+  ```
+  第 5、6 条（「入库完成✓」提示、`idle/succeeded` 终态）**从未到达 onmessage**。
+
+- 未解的核心疑点（「为什么 requests 能收到、浏览器收不到」未定位）：
+  1. sse-starlette 的发送缓冲与连接关闭时序——后端 yield 终态后立即 break，
+     可能先关连接后 flush。但无法解释为何 requests（同步读）能收到。
+  2. 浏览器 EventSource 的自动重连机制——服务端断流后浏览器会自动带
+     `Last-Event-ID` 重连，后端 subscribe 回放历史（含终态），理论上应自愈。
+     为何这条自愈路径也失效，未定位。
+  3. HTTP/1.1 chunked 的 flush 时机——最后一条事件与连接关闭 FIN 可能在同一 TCP 段，
+     浏览器解析时可能把「事件数据」和「连接结束」合并处理导致丢弃。未证实。
+  4. onmessage/onerror 的时序竞态——连接关闭信号先于终态 message 到达，导致
+     source.close() 在 message dispatch 前执行。但需精确时序，且无法解释稳定复现。
+
+- 已排除的方向（勿再重复尝试）：
+  - ❌ 后端没发终态（已证伪：requests 收得到）
+  - ❌ 前端没写终态处理（已证伪：代码在，useEffect 会触发，只是 status 停在 running）
+  - ❌ 后端 yield 终态后加 `await asyncio.sleep(0.2)` 延迟关闭（实测无效，已回退）
+  - ❌ 前端 onerror 时查 `/events` 历史兜底（实测无效，已回退——onerror 可能根本不触发）
+  - ❌ sse.ts 放行 EventSource 原生重连 + seq 去重 + 历史兜底（前端工人实现后实测无效，
+       容错代码已移除）
+
+- 为何棘手：跨前后端、跨网络协议层、跨异步时序。后端日志只见「事件已 append 到
+  RunStore」，不见「是否真正发到网络」；浏览器 DevTools 对 SSE 流的逐事件展示有限
+  （尤其连接关闭阶段）；requests 与 EventSource 底层读取机制不同，前者能收到不代表
+  后者也能收到。稳定复现（每次都丢）排除了偶发抖动，指向确定性的协议/时序 bug，
+  但藏在哪一层尚未定位。
+
+- 后续诊断建议（方向，非方案）：考虑绕开 SSE 终态依赖——前端上传/删除后改用轻量
+  HTTP 轮询 `/api/runs/{id}`（该接口肯定能拿到 status），看到 succeeded/failed 就
+  refresh；SSE 只用于驱动动画（像素小人 stage），不承担触发刷新的关键职责，二者解耦。

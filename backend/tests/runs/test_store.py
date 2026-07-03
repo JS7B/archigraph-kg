@@ -33,6 +33,20 @@ def test_append_event_records_and_updates_status():
     assert r.status == RunStatus.RUNNING
 
 
+def test_append_event_assigns_incrementing_seq():
+    """seq 由 append_event 统一赋值（Run 内 1 起递增），前端断线重连按它去重。"""
+    s = RunStore()
+    r = s.create_run(RunKind.INGEST)
+    s.append_event(r.id, _evt(Stage.PARSING))
+    s.append_event(r.id, _evt(Stage.INDEXING))
+    s.append_event(r.id, _evt(Stage.IDLE, RunStatus.SUCCEEDED))
+    assert [e.seq for e in r.events] == [1, 2, 3]
+    # 不同 Run 各自独立计数
+    r2 = s.create_run(RunKind.CHAT)
+    s.append_event(r2.id, _evt(Stage.SEARCHING))
+    assert r2.events[0].seq == 1
+
+
 def test_terminal_event_sets_status():
     s = RunStore()
     r = s.create_run(RunKind.INGEST)
@@ -69,6 +83,8 @@ async def test_subscribe_receives_new_events_after_subscription():
     assert Stage.UPLOADING in stages  # 历史事件也被投递（不漏）
     assert Stage.PARSING in stages
     assert received[-1].status == RunStatus.SUCCEEDED
+    # 回放的历史事件保留原 seq（重连去重的前提）
+    assert [e.seq for e in received] == [1, 2, 3]
     s.unsubscribe(r.id, q)
 
 

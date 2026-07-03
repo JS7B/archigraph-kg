@@ -285,3 +285,24 @@
   - **ChatRequest 需配 alias**：前端契约用 camelCase（conversationId），Pydantic 默认不认，需 `Field(alias="conversationId")` + `populate_by_name=True`。
   - **Conversation/Message 无 document_id，清理需扩展**：现有 `_clean` fixture 按 document_id 前缀清理，会话节点没有该字段，必须加 `conversation_id STARTS WITH 'conv_test'` 清理，否则污染共享库。
   - **turn_index 自增与幂等的张力**：add_message 内部自增 turn_index，导致"连续两次 add 相同内容"会产生两条（turn_index 不同）。真正幂等靠 MERGE by message_id——当前 run_chat 是 BackgroundTask 失败不自动重试，重试场景不存在，幂等是防御性的。
+
+## 2026-07-02 RunEvent 加 seq 序号（注：终态丢失问题实际未解决）
+
+> ⚠️ 此条原副标题为「支撑前端 SSE 断线重连去重」，但前端经多轮尝试（seq 去重、
+> 历史兜底、放行原生重连）后实测**终态事件仍丢失**，问题回到未解决。seq 字段
+> 作为基础设施保留（后端事件确实有序号了），但它要支撑的「前端去重修复终态」
+> 目标未达成。详见 frontend/DEVLOG.md 同日「[未解决] 长任务 SSE 终态事件丢失」。
+
+- 做了什么：`RunEvent` 新增 `seq` 字段，由 `RunStore.append_event` 统一赋值
+  （Run 内 1 起递增）；stream 与 `/events` 历史接口随 `model_dump` 自动输出。
+
+- 这是什么：事件序号。前端 EventSource 断线重连后，后端 `subscribe` 会回放
+  全部历史事件（防漏机制），代价是重连方会收到重复事件——seq 让前端能安全
+  去重（只消费大于已见最大值的事件）。
+
+- 为什么需要：修复「长任务终态丢失」bug 的后端配套。没有 seq，前端要么不敢
+  放行自动重连（旧实现直接 close，卡死），要么重连后事件翻倍污染 UI。
+
+- 为什么这么做：赋值收敛在 `append_event` 单点（而非各 emit 处手填），保证
+  连续无洞；不用 SSE 协议层的 `id:`/`Last-Event-ID`（服务端还得实现按 id 跳过
+  回放，复杂），客户端按 seq 过滤即可，符合简单优先。
