@@ -12,14 +12,21 @@ export function useRunEvents(runId: string | null) {
   const [events, setEvents] = useState<RunEvent[]>([])
   const [currentStage, setCurrentStage] = useState<Stage>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [prevRunId, setPrevRunId] = useState(runId)
 
-  useEffect(() => {
-    if (!runId) return
-
-    // 每次切换 runId 重置状态，避免上一个 Run 的事件残留。
+  // runId 一变（含变回 null）立即在渲染期清空事件，而非等 effect。否则 Run 结束
+  // （runId→null）时旧终态事件会滞留在 events 里；下个 Run 起（null→newId）触发消费方的
+  // 终态 effect 时，它读到的仍是上一轮残留的成功事件，把旧答案当本轮结果——即问答/上传
+  // "慢一拍、要再发/再点一次" 的根因。渲染期重置保证消费方本帧就拿到空 events。
+  if (runId !== prevRunId) {
+    setPrevRunId(runId)
     setEvents([])
     setCurrentStage('idle')
     setError(null)
+  }
+
+  useEffect(() => {
+    if (!runId) return
 
     const unsubscribe = subscribeRunEvents(
       runId,
