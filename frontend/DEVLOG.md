@@ -464,3 +464,28 @@
 
 - 边界：sceneMap 的 label/detail 不删（busy 仍驱动 data-busy 动画，只是不再显示文字）。
   红线守：AgentRoom 的 stage 仍只来自真实 RunEvent，events 仅驱动下方轨迹显示。
+
+## 2026-07-03 修问答/上传"慢一拍"——useRunEvents 事件残留竞态
+
+- 做了什么：`useRunEvents` 把"清空事件"从 effect 里挪到渲染期（`runId` 变化时同步重置）。
+  一处改动同时修好两个症状：问答发新问题时显示上一次的回答、上传文档要点第二次才有反应。
+
+- 这是什么：一个 React 状态时序 bug。`useRunEvents(runId)` 累积某个 Run 的 SSE 事件，
+  消费方（WorkbenchView/LibraryView）用一个"终态 effect"监听 `events` 的最后一条，
+  是成功事件就落成答案/刷新列表，然后把 runId 清成 null 结束订阅。
+
+- 为什么会错（根因）：原来重置 `events` 的代码写在 `useEffect` 里、且被 `if (!runId) return`
+  挡在前面。于是 Run 结束（runId→null）时这段重置**永远走不到**，上一轮的成功事件一直
+  滞留在 `events` 数组里。等下一个 Run 起来（null→newId），消费方的终态 effect 因依赖
+  `runId` 变化被重新触发，而**这一帧它读到的 `events` 仍是上一轮的残留**（新 Run 的
+  `setEvents([])` 只是排队、还没生效）。结果：它把**上一轮的答案**当成本轮结果落下，
+  同时把刚起的新 Run 订阅拆掉——所以"慢一拍、要再发一次/再点一次"。
+
+- 为什么这么改：用 React 官方的"渲染期随输入变化调整 state"模式
+  （`if (runId !== prevRunId) { setPrevRunId(...); setEvents([]) }`）。它在渲染阶段就把
+  `events` 清空并触发 React 立即用新 state 重渲染，**早于**任何 effect 运行——所以消费方的
+  终态 effect 本帧就能拿到空 `events`，读不到旧事件。备选是在消费方 effect 里判 runId 归属，
+  但那是打补丁；根因是事件残留，在数据源头（hook）清才干净，且两个视图共用此 hook，改一处全修。
+
+- 踩了什么坑：症状看起来像"后端返回了旧回答"，实际后端每轮 Run 独立、答案现算现发，
+  完全正常——排查时先从后端 RunStore/SSE 确认无跨轮串味，才把方向锁定到前端状态时序。
