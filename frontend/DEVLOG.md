@@ -645,3 +645,34 @@
 
 - 踩了什么坑：无（后端跨线程 emit 沿用 run_chat 的 call_soon_threadsafe
   模式，见 backend/DEVLOG.md 同日记录）。
+
+
+## 2026-07-03 F1 回答区 Markdown 化 + 引用角标内联芯片
+
+- 做了什么：ChatThread 回答正文从纯文本插值改为 react-markdown + remark-gfm
+  渲染；正文里的 `[n]` 角标预处理成 `[[n]](#cite-n)` 链接语法，覆写 markdown 的
+  `a` 组件把 `#cite-` 前缀渲染成可点内联引用芯片（点击复用原有 CitationPanel
+  高亮+滚动逻辑），越界号自然降级为纯文本；末尾按钮排改为「本回答引用：[1][2]…」
+  汇总行，与正文角标复用同一芯片；配套 CSS 给 markdown 产物排版、用户气泡
+  `pre-wrap`、代码块/表格 `overflow-x: auto`。
+
+- 这是什么：react-markdown 是把 Markdown 字符串安全渲染成 React 元素的库
+  （不启用 raw HTML，天然免 XSS）；remark-gfm 补上表格/删除线/任务列表等
+  GitHub 风格扩展。「组件覆写」指用 `components={{ a: ... }}` 拦截某类节点自定义
+  渲染——这里把引用角标从"纯文本"升级成"随句可点的芯片"。
+
+- 为什么需要：回答是产品门面，之前 `.answerText` 无 `white-space`、正文纯插值，
+  换行被折叠、列表/粗体/表格原样显示，文字挤成一团；角标两套并存（正文纯文本
+  `[n]` + 末尾按钮）位置对不上。一行 CSS 只能救换行，救不了列表与结构。
+
+- 为什么这么做：角标走「正则预处理 + a 覆写」而非自写 Markdown AST 插件——
+  用 Markdown 原生链接语法承载角标，改动最小且天然继承解析器的括号处理；
+  芯片抽成 ChatThread 内的局部组件，正文与汇总行复用一处造型/回调，不新建文件。
+  用 micromark 实测 `[[1]](#cite-1)` 稳定解析为 `<a href="#cite-1">[1]</a>`，
+  越界 `[999]` 也成链接、由覆写降级为纯文本，确认括号语义可靠后才落地。
+  历史会话回灌（toChatMessages 已构造 answer 对象）自动走同一渲染路径，无需另改。
+
+- 踩了什么坑：react-markdown v10 移除了组件自身的 `className` 属性，需外层包
+  `<div className={styles.answerText}>` 承载排版样式；表格横向滚动用
+  `display:block; width:max-content; max-width:100%; overflow-x:auto` 的
+  GitHub 惯用写法，直接给 `<table>` 加 overflow 不生效。
