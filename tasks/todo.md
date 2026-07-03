@@ -248,6 +248,25 @@
 - [ ] 第三方能按 README 跑起来。
 - [ ] 演示材料能完整展示文档入库、GraphRAG 问答、引用追踪、图谱可视化和像素 Agent 动效。
 
+### 体验升级批次（2026-07-03 签发，规格见 docs/superpowers/specs/2026-07-03-experience-upgrade-design.md）
+
+后端工人（feat/backend，清单 tasks/handoff-backend-extraction-quality.md）：
+
+- [ ] B1 抽取 prompt 重写（封闭类型集/排除清单/枚举展开/中英混合 few-shot）
+- [ ] B2 归并 key 去 type
+- [ ] B3 Entity 写 mentionCount（不做硬过滤）
+- [ ] B4 图谱 API 度数降序 + degree/mentionCount 字段
+- [ ] B5 评估扩全量 4 篇 + 未匹配清单（验收：实体召回 ≥ 70%）
+- [ ] B6 问答输出格式指示（Markdown 分段，配合前端渲染）
+
+前端工人（feat/frontend，清单 tasks/handoff-frontend-answer-graph-agentroom.md，F1→F2→F3 串行）：
+
+- [ ] F1 回答区 Markdown 化 + 引用角标内联可点（末尾保留汇总行）
+- [ ] F2 图谱展示分级降噪（fcose 布局/度数分级/隐藏孤立节点默认开）
+- [ ] F3 AgentRoom 生命感（行为队列状态机 + idle 随机剧本 + 工作循环编排）+ 视觉升级（ui-ux-pro-max / frontend-design 技能）
+
+依赖已由大脑装入 main：react-markdown / remark-gfm / cytoscape-fcose（前端，0 漏洞）。
+
 ## Review
 
 - 2026-06-16：将项目定位为个人知识图谱 GraphRAG Agent。确认 OpenAI-compatible 调用和 Neo4j 图谱存储，形成初始实现路线。
