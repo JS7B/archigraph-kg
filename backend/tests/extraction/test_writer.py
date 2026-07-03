@@ -82,6 +82,21 @@ def test_mentions_created(ensured_schema):
     assert records[0]["n"] == 2
 
 
+def test_mention_count_written(ensured_schema):
+    # FastAPI 有 2 个 mention_chunk_ids → mention_count=2；Pydantic 1 个 → 1
+    _ingest_chunks(ensured_schema)
+    write_extraction(ensured_schema, DOC_ID, _extraction())
+    records, _, _ = ensured_schema.execute_query(
+        "MATCH (e:Entity {document_id: $d}) "
+        "RETURN e.entity_id AS id, e.mention_count AS mc ORDER BY e.entity_id",
+        d=DOC_ID,
+        database_="neo4j",
+    )
+    mc = {r["id"]: r["mc"] for r in records}
+    assert mc[f"{DOC_ID}::fastapi::技术概念"] == 2
+    assert mc[f"{DOC_ID}::pydantic::技术概念"] == 1
+
+
 def test_relation_properties_round_trip(ensured_schema):
     _ingest_chunks(ensured_schema)
     write_extraction(ensured_schema, DOC_ID, _extraction())

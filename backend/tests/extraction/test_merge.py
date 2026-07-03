@@ -41,9 +41,36 @@ def test_case_and_space_normalized():
 
 
 def test_entity_id_format():
-    extractions = [_ce("d#0", entities=[ExtractedEntity(name="Neo4j", type="技术概念")])]
+    # entity_id 只含 document_id::normalized_name（不再含 type）
+    extractions = [_ce("d#0", entities=[ExtractedEntity(name="Neo4j", type="技术")])]
     result = merge_extractions("mydoc", extractions)
-    assert result.entities[0].entity_id == "mydoc::neo4j::技术概念"
+    assert result.entities[0].entity_id == "mydoc::neo4j"
+
+
+def test_same_name_different_type_merges_with_majority_type():
+    # React 被标 3 次「技术」、1 次「概念」→ 合并成 1 个实体，type 取多数「技术」
+    extractions = [
+        _ce("d#0", entities=[ExtractedEntity(name="React", type="技术")]),
+        _ce("d#1", entities=[ExtractedEntity(name="React", type="概念")]),
+        _ce("d#2", entities=[ExtractedEntity(name="React", type="技术")]),
+        _ce("d#3", entities=[ExtractedEntity(name="React", type="技术")]),
+    ]
+    result = merge_extractions("d", extractions)
+    assert len(result.entities) == 1
+    ent = result.entities[0]
+    assert ent.type == "技术"
+    assert ent.entity_id == "d::react"
+    assert ent.mention_chunk_ids == ["d#0", "d#1", "d#2", "d#3"]
+
+
+def test_type_tie_keeps_first_seen():
+    # 「技术」与「概念」各 1 次并列 → 取先见的「概念」
+    extractions = [
+        _ce("d#0", entities=[ExtractedEntity(name="Agent", type="概念")]),
+        _ce("d#1", entities=[ExtractedEntity(name="Agent", type="技术")]),
+    ]
+    result = merge_extractions("d", extractions)
+    assert result.entities[0].type == "概念"
 
 
 def test_relation_endpoints_resolved():
@@ -51,8 +78,8 @@ def test_relation_endpoints_resolved():
         _ce(
             "d#0",
             entities=[
-                ExtractedEntity(name="FastAPI", type="技术概念"),
-                ExtractedEntity(name="Pydantic", type="技术概念"),
+                ExtractedEntity(name="FastAPI", type="技术"),
+                ExtractedEntity(name="Pydantic", type="技术"),
             ],
             relations=[
                 ExtractedRelation(source="FastAPI", target="Pydantic", type="依赖", confidence=0.8)
@@ -62,8 +89,8 @@ def test_relation_endpoints_resolved():
     result = merge_extractions("d", extractions)
     assert len(result.relations) == 1
     rel = result.relations[0]
-    assert rel.source_id == "d::fastapi::技术概念"
-    assert rel.target_id == "d::pydantic::技术概念"
+    assert rel.source_id == "d::fastapi"
+    assert rel.target_id == "d::pydantic"
     assert rel.evidence_chunk_id == "d#0"
 
 

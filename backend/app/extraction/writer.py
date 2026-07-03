@@ -16,7 +16,8 @@ UNWIND $entities AS e
         n.entity_type = e.type,
         n.normalized_name = e.normalized_name,
         n.description = e.description,
-        n.document_id = $document_id
+        n.document_id = $document_id,
+        n.mention_count = size(e.mention_chunk_ids)
 """
 
 _MERGE_MENTIONS = """

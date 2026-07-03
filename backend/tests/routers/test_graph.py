@@ -46,7 +46,8 @@ def _client():
 
 def test_list_entities(seeded_graph):
     client = _client()
-    r = client.get("/api/graph/entities")
+    # limit 拉满：共享库可能已有其它真实实体，避免种子实体被 LIMIT 截断挤出。
+    r = client.get("/api/graph/entities?limit=1000")
     assert r.status_code == 200
     body = r.json()
     names = {n["name"] for n in body["nodes"]}
@@ -60,6 +61,16 @@ def test_list_entities(seeded_graph):
         e for e in body["edges"] if e["source"].startswith("test_ent_")
     ]
     assert len(test_edges) >= 2
+    # B4：每个节点都带 degree / mentionCount 字段
+    for n in body["nodes"]:
+        assert "degree" in n and "mentionCount" in n
+    # B4：整表按度数降序（直接验证 ORDER BY degree DESC，对任意数据都成立）
+    degrees = [n["degree"] for n in body["nodes"]]
+    assert degrees == sorted(degrees, reverse=True)
+    # B4：A（2 条 RELATES）排在只有 1 条的 B、C 之前
+    order = [n["id"] for n in body["nodes"] if n["id"].startswith("test_ent_")]
+    assert order.index("test_ent_A") < order.index("test_ent_B")
+    assert order.index("test_ent_A") < order.index("test_ent_C")
 
 
 def test_neighbors(seeded_graph):

@@ -10,9 +10,10 @@ router = APIRouter(prefix="/api/graph", tags=["graph"])
 
 _LIST_ENTITIES = """
 MATCH (e:Entity)
+WITH e, COUNT { (e)-[:RELATES]-() } + COUNT { (:Chunk)-[:MENTIONS]->(e) } AS degree
 RETURN e.entity_id AS entity_id, e.name AS name, e.entity_type AS entity_type,
-       e.document_id AS document_id
-ORDER BY e.name
+       e.document_id AS document_id, e.mention_count AS mention_count, degree
+ORDER BY degree DESC, e.name
 LIMIT $limit
 """
 
@@ -53,12 +54,18 @@ LIMIT $limit
 
 
 def _node(row: dict) -> dict:
-    return {
+    node = {
         "id": row["entity_id"],
         "name": row["name"] or "",
         "type": row["entity_type"] or "",
         "documentId": row["document_id"] or "",
     }
+    # 列表查询附带的重要性数据（供前端分级展示）；search/neighbors 不返回这两列。
+    if "degree" in row:
+        node["degree"] = row["degree"] or 0
+    if "mention_count" in row:
+        node["mentionCount"] = row["mention_count"] or 0
+    return node
 
 
 def _edge(row: dict) -> dict:
