@@ -308,9 +308,22 @@ export function GraphView() {
     edges.addClass('searchDimmed')
     matchingNodes.addClass('searchMatch')
     matchingNodes.connectedEdges().removeClass('searchDimmed')
-  }, [searchTerm])
+    // 依赖含 graphData/hideIsolated：cy 实例随二者重建后，本 effect 重跑复算高亮，
+    // 否则切换「隐藏孤立节点」重建实例会丢掉搜索高亮（搜索框却仍有词）。
+  }, [searchTerm, graphData, hideIsolated])
 
   const isEmpty = !loading && !loadError && graphData && graphData.nodes.length === 0
+
+  // 当前画布可见节点数（隐藏孤立时 = 度数 > 0 的节点数）。用于"全被隐藏"的空态提示。
+  const visibleNodeCount = useMemo(() => {
+    if (!graphData) return 0
+    if (!hideIsolated) return graphData.nodes.length
+    return graphData.nodes.filter((node) => nodeDegree(node, graphData.edges) > 0).length
+  }, [graphData, hideIsolated])
+
+  // 有实体、但当前可见节点为 0（全孤立且开关开着）：画布会空白，需给出解释而非静默。
+  const allHidden =
+    !loading && !loadError && !!graphData && graphData.nodes.length > 0 && visibleNodeCount === 0
 
   return (
     <section className={styles.graphView}>
@@ -330,8 +343,15 @@ export function GraphView() {
         {isEmpty && (
           <div className={styles.statusMsg}>知识库还没有实体。上传文档并完成入库后，这里会显示实体与关系。</div>
         )}
-        {/* 数据就绪才挂载 Cytoscape 容器，避免空容器闪烁 */}
-        {!loading && !loadError && graphData && graphData.nodes.length > 0 && (
+        {/* 全部实体都是孤立点、被默认隐藏：画布会空白，给出提示而非静默空白 */}
+        {allHidden && (
+          <div className={styles.statusMsg}>
+            {graphData!.nodes.length} 个实体当前都是孤立点（无关系连边），已按「隐藏孤立节点」默认隐藏。
+            关闭右侧开关可查看全部。
+          </div>
+        )}
+        {/* 数据就绪且有可见节点才挂载 Cytoscape 容器，避免空容器闪烁 */}
+        {!loading && !loadError && visibleNodeCount > 0 && (
           <>
             <div ref={containerRef} className={styles.canvas} />
             <div className={styles.canvasNote}>拖拽移动画布，滚轮缩放，点击节点查看详情。</div>

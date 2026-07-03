@@ -766,3 +766,20 @@
   MdNode 与 unist Node 的函数逆变类型摩擦。
 
 - 踩了什么坑：无（build 绿；插件行为经离线 mdast 解析验证）。
+
+
+## 2026-07-03 R1 复审修复 · F2（切换丢高亮 + 空白提示）
+
+- 做了什么：① 搜索高亮 effect 依赖从 `[searchTerm]` 补成 `[searchTerm, graphData,
+  hideIsolated]`；② 新增 `visibleNodeCount`/`allHidden`，当有实体但可见节点为 0（全孤立
+  且开关开着）时画布显示提示，画布挂载条件从 `nodes.length>0` 收紧为 `visibleNodeCount>0`。
+
+- 为什么需要：① cy 实例随 `hideIsolated` 重建，但高亮 effect 只依赖 searchTerm，重建后
+  高亮丢失、搜索框却仍有词，视觉与状态不一致。② 全孤立/少边图在默认隐藏下画布空白且
+  无解释，右侧实体列表却满员，用户会以为坏了。
+
+- 为什么这么做：① 给高亮 effect 补重建信号依赖后，切换开关 → cy-build effect 先重建
+  实例（声明在前）→ 高亮 effect 后重跑复算，顺序天然正确。② 空态提示走既有 statusMsg
+  样式，文案点明"N 个实体都是孤立点、可关开关查看"，把静默空白变成可解释状态。
+
+- 踩了什么坑：无（build 绿）。effect 声明顺序保证 cy 重建先于高亮复算。
