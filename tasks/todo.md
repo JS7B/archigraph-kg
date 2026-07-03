@@ -252,20 +252,29 @@
 
 后端工人（feat/backend，清单 tasks/handoff-backend-extraction-quality.md）：
 
-- [ ] B1 抽取 prompt 重写（封闭类型集/排除清单/枚举展开/中英混合 few-shot）
-- [ ] B2 归并 key 去 type
-- [ ] B3 Entity 写 mentionCount（不做硬过滤）
-- [ ] B4 图谱 API 度数降序 + degree/mentionCount 字段
-- [ ] B5 评估扩全量 4 篇 + 未匹配清单（验收：实体召回 ≥ 70%）
-- [ ] B6 问答输出格式指示（Markdown 分段，配合前端渲染）
+- [x] B1 抽取 prompt 重写（封闭类型集/排除清单/枚举展开/中英混合 few-shot）
+- [x] B2 归并 key 去 type
+- [x] B3 Entity 写 mentionCount（不做硬过滤）
+- [x] B4 图谱 API 度数降序 + degree/mentionCount 字段
+- [x] B5 评估扩全量 4 篇 + 未匹配清单（验收：实体召回 ≥ 70%）
+- [x] B6 问答输出格式指示（Markdown 分段，配合前端渲染）
 
 前端工人（feat/frontend，清单 tasks/handoff-frontend-answer-graph-agentroom.md，F1→F2→F3 串行）：
 
-- [ ] F1 回答区 Markdown 化 + 引用角标内联可点（末尾保留汇总行）
-- [ ] F2 图谱展示分级降噪（fcose 布局/度数分级/隐藏孤立节点默认开）
-- [ ] F3 AgentRoom 生命感（行为队列状态机 + idle 随机剧本 + 工作循环编排）+ 视觉升级（ui-ux-pro-max / frontend-design 技能）
+- [x] F1 回答区 Markdown 化 + 引用角标内联可点（末尾保留汇总行）
+- [x] F2 图谱展示分级降噪（fcose 布局/度数分级/隐藏孤立节点默认开）
+- [x] F3 AgentRoom 生命感（行为队列状态机 + idle 随机剧本 + 工作循环编排）+ 视觉升级（ui-ux-pro-max / frontend-design 技能）
 
 依赖已由大脑装入 main：react-markdown / remark-gfm / cytoscape-fcose（前端，0 漏洞）。
+
+批次遗留（非阻断，后续排期）：
+
+- [ ] 评估分句器 Markdown 感知化（B6 Markdown 输出致幻觉指标假阳性 16.7%→26.5%，逐条核查 0 条真编造；分句器不应把 Cytoscape.js 的点号当句界）
+- [ ] backend/app/extraction/models.py 陈旧注释（entity_id 格式已去 type）+ writer/chat 测试统一新 entity_id 格式
+- [ ] evals 汇总口径补说明（87.7% 为标注加权池化值，宏平均 86.6%）
+- [ ] F1 引用式链接定义 `[1]: url` 与角标碰撞（罕见）、引用芯片 aria-label 补文档来源
+- [ ] F2 搜索命中被隐藏孤立节点时的反馈、自环/重边度数口径、toggle 重排 randomize 跳变
+- [ ] F3 StyleGallery 预览微动画措辞、非 idle 初始一帧闪跳（useLayoutEffect）、sceneMap.detail 死字段
 
 ## Review
 
@@ -290,3 +299,4 @@
 - 2026-06-30：多轮对话记忆（B方案）落地完成，前后端双线并行 + 大脑 review 合并。**后端 feat/backend**：新增 app/conversations（Conversation/Message 节点 CRUD + message_embedding 向量索引，message_id=conv_id#turn_index 幂等 MERGE，turn_index 自增）；schema 加 2 约束 + 消息向量索引，main.py 维度兜底参数化覆盖 chunk+message 两索引；抽取 embed_texts（embed_chunks 复用，消息向量化复用）；agent/pipeline 加 history 参数（近期历史注入 [system,*history,user]），prompt 守引用红线（不得仅凭历史记忆作答）；run_chat 接 conversation_id → 读历史注入 → 写回本轮 user/agent 两条消息（问答各 embed 一次）；chat 路由同步解析会话 id（首问 create_conversation 在主线程，保 HTTP 响应立即返 id）+ 新增 /api/conversations 四端点。新增 14 测试全过（store/api/agent/tasks，含 turn_index 自增/幂等/citations 往返/注入窗口/列表降序/run_chat 主降级失败三路径）。**前端 feat/frontend**：新增 ConversationSidebar（会话列表/新建/切换/删除+二次确认，无障碍规范 role/aria/键盘可达/对话框）+ types/conversation + api/conversations；WorkbenchView 多会话状态管理（conversationId + 终态只清 chatRunId 不清会话[关键正确] + 切换回灌历史 toChatMessages 复用渲染）+ 三列布局 + 空态引导。**大脑 review**：逐条回源码核实（幂等/同步解析会话 id/history 默认 None 保现有测试不回归/降级带 history/维度兜底覆盖两索引/测试隔离 conv_test 前缀），跑测试 140 passed/6 skip（6 个真实 LLM 用例因 feat/backend worktree 配真实 key 配额耗尽 403，main 无 key 正确 skip，与 2026-06-22 同款环境问题非代码缺陷），前端 typecheck 零错误/build 通过。**大脑收尾**：发现前端遗留 USE_MOCK=true 未切真实（合并阻碍，会导致会话功能跑内存 mock 假数据），由大脑在 feat/frontend 改 false + 删 mock 段 + 补 DELETE 错误结构解析，重跑 typecheck/build 通过。按「先后端后前端」顺序合并 main（前端只动 frontend/、后端只动 backend/，无冲突），合并后 main 后端 140 passed/6 skip 无回归、前端 build 通过。handoff 交接清单文档美化（代码块加空行）随合并带入。**已知后续项**：① 真实多轮手测（验收 1/2/3 待配额恢复或换 key 实跑，代码逻辑已核实）；② turn_index 并发隐患（_NEXT_TURN 与 _ADD_MESSAGE 非原子，受 Semaphore+单用户串行写保护不撞，幂等 MERGE 保不翻倍，记录在案）；③ 会话标题取首问前 30 字，未来可让 LLM 生成。GitHub 推送本次执行（之前几轮暂缓）。
 - 2026-07-03：「长任务 SSE 终态事件丢失」**澄清为非 bug**。用户实测确认终态事件最终会正常到达浏览器——此前"进度停在抽取阶段、列表不刷新"只是实体抽取逐 chunk 调 LLM 耗时数分钟，每次诊断都没等到任务真正结束就误判"丢失"，SSE 链路前后端均无缺陷。多轮"修复"（后端 sleep 延迟关闭、前端 onerror 历史兜底、放行原生重连 + seq 去重）此前已全部回退，代码无容错/调试残留。本次收尾：更正 frontend/DEVLOG.md 与 backend/DEVLOG.md 两条误记条目、删除过时交接文档 tasks/handoff-sse-terminal-event-bug.md、新增 lessons L8（诊断「事件没到」前先确认「事件该到的时刻是否已过去」，对照实验须同条件）。保留项：后端 RunEvent.seq 字段（事件基础设施，日后断线重连去重可用）、「刷新列表/刷新图谱」按钮（转为低频手动刷新入口，不再是 bug 绕过手段）。
 - 2026-07-03：大脑 review 合并 feat/frontend 两个修复提交（merge d3e0eef）。**a93e2b0 慢一拍竞态修复**（质量高，直接合入）：useRunEvents 把清空事件挪到渲染期（React 官方"渲染期随输入调整 state"模式），根修「问答显示上一轮回答/上传要第二次才生效」——旧代码重置被 `if (!runId) return` 挡住，runId→null 时事件残留，下轮 Run 的终态 effect 读到旧事件误当本轮结果。**a087a94 SSE 兜底 + 刷新按钮**（有保留合入）：onerror 查 /events 历史补投终态的兜底，虽源于已澄清的误诊（07-01 提交，早于误诊结论），但对真实断线（网络抖动/服务重启）是有效防御，评审定性为防御性容错保留；图谱刷新按钮与 main 0cbaff0 重复，合并时去掉分支实现。**合并时修正两处**：sse.ts 头注释按误诊结论重新定性（不再声称"修终态丢失 bug"）；补 disposed 退订守卫——原 closed 标志的注释声称能屏蔽卸载后的迟到回调但实现未检查，迟到的兜底 fetch 会把旧 Run 终态泄漏进新 Run（恰是 a93e2b0 修的那类串味）。DEVLOG 冲突按时间序保留双方条目，并订正「sse.ts 无容错残留」表述与实际合并结果一致。前端 tsc 验证通过；main 工作区未提交批次经 stash 往返无损恢复。
+- 2026-07-03：体验升级批次双线收官（merge 6237527 后端 + 708430f 前端）。**后端 B1-B6**：抽取 prompt 重写（封闭类型集/排除清单/枚举展开/中英混合 few-shot）+ 归并去 type（Counter 多数决，并列取先见，确定性核验）+ mention_count + 图谱 API 度数降序（degree=RELATES+MENTIONS，孤立保留、HAS_CHUNK 不误算）+ 评估扩全量 4 篇：**实体召回 57.1%→87.7%（池化）/86.6%（宏平均），四篇最低 78.6%，≥70% 硬指标稳达**。**前端 F1-F3 + R1 五项必修**：回答区 react-markdown + remark AST 角标插件（代码区免疫污染，正解替代字符串预处理）+ 消息级 React.memo 记忆化；图谱 fcose 布局 + 度数三档分级 + 隐藏孤立默认开（丢高亮/空白提示两缺陷修复）；AgentRoom 行为队列状态机（idle 加权随机剧本 + 工作 stage 循环编排 + 中断即转保留）+ 顺手修复 roomScenes.css 死选择器（全局裸类名命不中 CSS Module 哈希，linking/searching/error 道具动画从未生效过）+ 系统性布光视觉升级（key/ambient/vignette 三层 + 角色三段受光）。评审流程：大脑首轮打回 5 项必修（含点名的技能驱动视觉升级缺执行），工人二轮全部真正修复。验证：后端 worktree 与合并后 main 均 150 passed（含真实 LLM 用例）；前端 tsc/build 零错误。非阻断遗留 6 条挂 todo「批次遗留」。
