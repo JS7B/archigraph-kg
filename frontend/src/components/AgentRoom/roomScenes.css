@@ -5,6 +5,9 @@
         不在此文件控制 left）。本文件只管：① 道具按 [data-stage] 显隐/运转；
         ② error 状态小人抖动（覆盖 bob 动画）。
    道具 DOM 常驻（AgentRoom.tsx 里写死全局 class 名，不经 styles hash）。
+   注：文档处理各 stage（uploading/parsing/extracting/indexing/deleting/
+   rebuilding）的道具已删除——AgentRoom 只订阅问答 Run，这些 stage 的真实
+   事件从不到达本组件，保留会违反"动画必须来自真实 RunEvent"红线。
    ──────────────────────────────────────────────────────────── */
 
 /* ═══ 道具运转（按 data-stage 激活）═══ */
@@ -14,70 +17,6 @@
   position: absolute;
   opacity: 0;
   transition: opacity 0.25s;
-}
-
-/* uploading：文档从右侧飞向打印机 */
-.p-flydoc {
-  right: 30px;
-  bottom: 90px;
-  width: 16px;
-  height: 12px;
-  background: var(--prop-doc);
-  border: 1px solid var(--prop-doc-line);
-}
-.canvas[data-stage="uploading"] .p-flydoc {
-  opacity: 1;
-  animation: ar-fly-in 1.2s ease-in infinite;
-}
-@keyframes ar-fly-in {
-  0% { opacity: 0; transform: translateX(0); }
-  20% { opacity: 1; }
-  100% { opacity: 0; transform: translateX(-130px); }
-}
-
-/* parsing / extracting：打印机吐出的纸（弧线飞出落下）*/
-.p-paper {
-  left: 168px;
-  bottom: 80px;
-  width: 14px;
-  height: 10px;
-  background: var(--prop-doc);
-  border: 1px solid var(--prop-doc-line);
-  transform-origin: center;
-}
-.canvas[data-stage="parsing"] .p-paper,
-.canvas[data-stage="extracting"] .p-paper {
-  opacity: 1;
-  animation: ar-paper-fly 1.4s ease-in infinite;
-}
-.canvas[data-stage="parsing"] .p-paper2,
-.canvas[data-stage="extracting"] .p-paper2 { animation-delay: 0.35s; }
-.canvas[data-stage="parsing"] .p-paper3,
-.canvas[data-stage="extracting"] .p-paper3 { animation-delay: 0.7s; }
-@keyframes ar-paper-fly {
-  0% { opacity: 0; transform: translate(0, 0) rotate(0); }
-  15% { opacity: 1; }
-  100% { opacity: 0; transform: translate(34px, 46px) rotate(50deg); }
-}
-
-/* extracting：粉色标签贴纸从打印机弹出上升 */
-.p-tag {
-  left: 172px;
-  bottom: 82px;
-  width: 12px;
-  height: 8px;
-  background: var(--dude-body-hi);
-  border-radius: 1px;
-}
-.canvas[data-stage="extracting"] .p-tag {
-  opacity: 1;
-  animation: ar-tag-pop 1s ease-out infinite;
-}
-.canvas[data-stage="extracting"] .p-tag2 { animation-delay: 0.4s; }
-@keyframes ar-tag-pop {
-  0% { opacity: 0; transform: translateY(0) scale(0.6); }
-  40% { opacity: 1; transform: translateY(-14px) scale(1); }
-  100% { opacity: 0; transform: translateY(-26px) scale(0.8); }
 }
 
 /* linking：两节点连线生长（打印机上方）*/
@@ -111,23 +50,6 @@
   100% { opacity: 0; transform: scaleX(0); }
 }
 
-/* indexing：档案柜绿光（写入完成感）*/
-.p-cabglow {
-  right: 72px;
-  bottom: 90px;
-  width: 26px;
-  height: 6px;
-  background: radial-gradient(ellipse, rgba(127, 209, 160, 0.6), transparent 70%);
-}
-.canvas[data-stage="indexing"] .p-cabglow {
-  opacity: 1;
-  animation: ar-cab-glow 1.2s ease-in-out infinite;
-}
-@keyframes ar-cab-glow {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
-}
-
 /* searching：放大镜（档案柜前扫描）*/
 .p-glass {
   right: 78px;
@@ -155,53 +77,6 @@
 @keyframes ar-glass-scan {
   0%, 100% { opacity: 1; transform: translateX(-6px); }
   50% { opacity: 1; transform: translateX(6px); }
-}
-
-/* deleting：碎纸机吞纸（顶部）+ 碎屑掉落（底部）*/
-.p-shredin {
-  right: 25px;
-  bottom: 78px;
-  width: 14px;
-  height: 10px;
-  background: var(--prop-doc);
-  border: 1px solid var(--prop-doc-line);
-}
-.canvas[data-stage="deleting"] .p-shredin {
-  opacity: 1;
-  animation: ar-suck 0.9s ease-in infinite;
-}
-@keyframes ar-suck {
-  0% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(10px); }
-}
-.p-shredout {
-  right: 20px;
-  bottom: 48px;
-  width: 2px;
-  height: 5px;
-  background: var(--prop-doc);
-  box-shadow: -5px 0 var(--prop-doc), 5px 1px var(--prop-doc),
-    -2px 2px var(--prop-doc), 3px 0 var(--prop-doc);
-}
-.canvas[data-stage="deleting"] .p-shredout {
-  opacity: 1;
-  animation: ar-fall 0.9s linear infinite;
-}
-@keyframes ar-fall {
-  0% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(8px); }
-}
-
-/* rebuilding：复用销毁台位置作复印机——顶部扫描光 + 底部吐纸。
-   复用 p-shredout 的吐纸动画，加一条扫描光。*/
-.canvas[data-stage="rebuilding"] .p-shredin {
-  opacity: 1;
-  animation: ar-eject 1.2s ease-out infinite;
-}
-@keyframes ar-eject {
-  0% { opacity: 0; transform: translateY(-4px); }
-  40% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(12px); }
 }
 
 /* ═══ error：红光闪烁 + 小人抖动 ═══ */

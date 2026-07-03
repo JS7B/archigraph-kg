@@ -12,18 +12,16 @@
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
+/* 面板外观 composes 自共享 Card，避免手写副本与设计系统漂移 */
 .chatThread {
+  composes: card from '../../components/ui/Card/Card.module.css';
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
   padding: var(--space-4);
-  box-shadow: var(--shadow-sm);
 }
 
 /* 空态：未选会话时的引导 */
@@ -39,21 +37,18 @@
 }
 
 .composer {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  composes: card from '../../components/ui/Card/Card.module.css';
   padding: var(--space-3);
-  box-shadow: var(--shadow-sm);
 }
 
 /* 右列：AgentRoom（含运行轨迹） + CitationPanel */
 .sideCol {
-  flex: 0 0 calc(var(--space-8) * 5);
+  flex: 0 0 var(--size-sidebar);
   display: flex;
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 .stagePanel {
@@ -61,7 +56,7 @@
   min-height: 0; /* AgentRoom 内容自适应，flex 比例由父侧栏控制 */
 }
 
-/* 引用证据面板（移到右列）：固定上限 + 内部滚动 */
+/* 引用证据面板（移到右列）：有引用时占一半列高 + 内部滚动 */
 .citationPanel {
   flex: 1;
   min-height: 0;
@@ -73,14 +68,20 @@
   box-shadow: var(--shadow-xs);
 }
 
+/* 空态收缩：无引用时只留一行提示（CitationPanel 空态自带虚线框，
+   外层不再加底/边框避免双重框），高度让给上方 AgentRoom */
+.citationPanelEmpty {
+  flex: 0 0 auto;
+}
+
 .runError {
   margin-top: var(--space-2);
   color: var(--color-error);
   font-size: var(--text-sm);
 }
 
-/* 响应式：<860px 三列堆叠成单列（侧边栏自身有 max-height 折叠），主区与侧栏给最小高度 */
-@media (max-width: 860px) {
+/* 响应式：<960px（项目统一断点）三列堆叠成单列（侧边栏自身有 max-height 折叠），主区与侧栏给最小高度 */
+@media (max-width: 960px) {
   .workbench {
     flex-direction: column;
   }

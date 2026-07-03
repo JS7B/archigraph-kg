@@ -1,30 +1,12 @@
+/* 内边距由外层抽屉（App.module.css .settingsBody）统一提供，这里不再加，避免双重留白 */
 .settings {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  width: 100%;
-  max-width: 640px;
-  margin: 0 auto;
-  padding: var(--space-5);
-}
-
-.header {
-  display: flex;
-  align-items: baseline;
   gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.title {
-  margin: 0;
-  font-size: var(--text-2xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--leading-tight);
+  width: 100%;
 }
 
 .refreshBtn {
-  margin-left: auto;
   font-size: var(--text-sm);
   padding: var(--space-1) var(--space-3);
   border: 1px solid var(--color-border-strong);
@@ -90,10 +72,36 @@
   line-height: var(--leading-relaxed);
 }
 
+/* 模型配置清单：两列网格，变量名列宽取最长项，值列自然对齐成列 */
 .configList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+}
+
+.configItem {
+  display: contents;
+}
+
+.configName {
+  border-radius: var(--radius-xs);
+  padding: var(--space-0) var(--space-1);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-body);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  justify-self: start;
+  align-self: center;
+}
+
+.configDesc {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  align-self: center;
 }
 
 .steps {

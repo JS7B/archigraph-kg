@@ -211,7 +211,8 @@ export function WorkbenchView() {
           events={events}
         />
         {error && <div className={styles.runError}>{error}</div>}
-        <div className={styles.citationPanel}>
+        {/* 无引用时收缩为一行提示，高度让给 AgentRoom */}
+        <div className={citations.length > 0 ? styles.citationPanel : styles.citationPanelEmpty}>
           <CitationPanel citations={citations} activeChunkId={activeChunkId} />
         </div>
       </aside>

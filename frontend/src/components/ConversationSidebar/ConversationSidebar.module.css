@@ -3,8 +3,8 @@
   flex-direction: column;
   gap: var(--space-3);
   min-height: 0;
-  width: 240px;
-  flex: 0 0 240px;
+  width: var(--size-nav);
+  flex: 0 0 var(--size-nav);
   padding: var(--space-3);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -177,8 +177,8 @@
   gap: var(--space-2);
 }
 
-/* 响应式：窄屏侧边栏收窄 */
-@media (max-width: 860px) {
+/* 响应式：<960px（项目统一断点）侧边栏收窄 */
+@media (max-width: 960px) {
   .sidebar {
     width: 100%;
     flex-basis: auto;

@@ -33,9 +33,11 @@ def _make_run_ingest_that_succeeds():
     """构造一个假的 run_ingest：直接 emit 完整成功事件序列，不跑真实链路。"""
 
     async def _fake(driver, store, run_id, file_bytes, filename, doc_type):
+        # 与真实 run_ingest 的阶段序列保持一致：向量写入(indexing)先于逐 chunk 抽取(extracting)
         for stage, status in [
             (Stage.UPLOADING, RunStatus.RUNNING),
             (Stage.PARSING, RunStatus.RUNNING),
+            (Stage.INDEXING, RunStatus.RUNNING),
             (Stage.EXTRACTING, RunStatus.RUNNING),
             (Stage.INDEXING, RunStatus.RUNNING),
             (Stage.IDLE, RunStatus.SUCCEEDED),
@@ -98,7 +100,7 @@ def test_upload_eventual_success_via_sse(ensured_schema):
     assert r.status_code == 200
     events = r.json()
     stages = [e["stage"] for e in events]
-    assert stages == ["uploading", "parsing", "extracting", "indexing", "idle"]
+    assert stages == ["uploading", "parsing", "indexing", "extracting", "indexing", "idle"]
     assert events[-1]["status"] == "succeeded"
 
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch, ApiError, BASE_URL } from '../../api/client'
 import { Button, Card, Chip, DataValue, Eyebrow, StatusBadge } from '../../components/ui'
 import { useRunEvents } from '../../hooks/useRunEvents'
-import type { DocumentMeta, DocumentSourceType, IndexStatus, ParseStatus } from '../../types'
+import type { DocumentMeta, DocumentSourceType, IndexStatus, ParseStatus, Stage } from '../../types'
 import styles from './LibraryView.module.css'
 
 const sourceTypeLabels: Record<DocumentSourceType, string> = {
@@ -49,6 +49,23 @@ interface IngestRunCreated {
 interface DeleteRunCreated {
   runId: string
   documentId: string
+}
+
+// 入库/删除 Run 各 stage 的进度标签（中文）。抽取阶段的逐 chunk 进度细节由
+// 事件 message 承载（如「正在从分块 3/15 中抽取实体与关系…」），此处只标阶段名。
+const stageLabels: Record<Stage, string> = {
+  idle: '已完成',
+  uploading: '接收文件中',
+  parsing: '解析文档中',
+  extracting: '抽取实体关系中',
+  linking: '连接关系中',
+  indexing: '写入图谱中',
+  searching: '检索中',
+  checking: '校验中',
+  writing: '生成中',
+  deleting: '删除文档中',
+  rebuilding: '重建索引中',
+  error: '出错',
 }
 
 // 后端支持的扩展名（与 documents.py _SUPPORTED 对齐）。
@@ -168,8 +185,8 @@ export function LibraryView() {
             <span className={styles.summaryText}>个可追溯片段</span>
           </div>
           {isBusy && (
-            <div className={styles.summary}>
-              <Chip tone="accent">{currentStage} 进行中</Chip>
+            <div className={styles.summary} role="status" aria-live="polite">
+              <Chip tone="accent">{stageLabels[currentStage]}</Chip>
               {lastMessage && <span className={styles.summaryText}>{lastMessage}</span>}
             </div>
           )}

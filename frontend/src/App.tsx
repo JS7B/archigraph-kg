@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Button } from './components/ui'
 import { TopBar, type ViewKey } from './components/TopBar/TopBar'
 import { WorkbenchView } from './views/WorkbenchView/WorkbenchView'
 import { LibraryView } from './views/LibraryView/LibraryView'
@@ -53,13 +54,29 @@ export default function App() {
           className={styles.settingsOverlay}
           onClick={() => setSettingsOpen(false)}
         >
-          {/* 点遮罩背景关闭；点内容区（settingsPlaceholder 内部）不关 */}
+          {/* 点遮罩背景关闭；点内容区（settingsDrawer 内部）不关。
+              关闭按钮放在抽屉顶部：打开时聚焦它，滚动位置自然停在开头
+              （放底部会因 focus 自动滚到底，见 frontend/DEVLOG.md）。 */}
           <div
-            className={styles.settingsPlaceholder}
+            className={styles.settingsDrawer}
+            role="dialog"
+            aria-modal="true"
+            aria-label="设置"
             onClick={(e) => e.stopPropagation()}
           >
-            <SettingsView />
-            <button ref={closeBtnRef} onClick={() => setSettingsOpen(false)}>关闭</button>
+            <header className={styles.settingsHeader}>
+              <h1 className={styles.settingsTitle}>设置</h1>
+              <Button
+                ref={closeBtnRef}
+                size="sm"
+                onClick={() => setSettingsOpen(false)}
+              >
+                关闭
+              </Button>
+            </header>
+            <div className={styles.settingsBody}>
+              <SettingsView />
+            </div>
           </div>
         </div>
       )}

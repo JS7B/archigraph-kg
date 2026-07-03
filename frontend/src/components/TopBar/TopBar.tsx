@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import styles from './TopBar.module.css'
+import { Button } from '../ui'
 import { GearIcon } from '../ui/Icon/Icon'
 import { fetchHealthDeps, type HealthDeps } from '../../api/health'
 
@@ -76,9 +77,9 @@ export function TopBar({ active, onChange, onToggleSettings }: TopBarProps) {
           aria-label={`LLM ${llmOk ? '已配置' : deps ? '未配置' : '未知'}`}
           role="img"
         />
-        <button className={styles.settingsBtn} onClick={onToggleSettings} aria-label="设置">
+        <Button className={styles.settingsBtn} size="sm" onClick={onToggleSettings} aria-label="设置">
           <GearIcon size={14} /> 设置
-        </button>
+        </Button>
       </div>
     </header>
   )

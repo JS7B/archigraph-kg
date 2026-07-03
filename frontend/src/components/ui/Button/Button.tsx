@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react'
 import styles from './Button.module.css'
 
 export interface ButtonProps
@@ -7,6 +7,8 @@ export interface ButtonProps
   size?: 'sm' | 'md'
   children: ReactNode
   className?: string
+  /** React 19 ref 直传（焦点管理等场景） */
+  ref?: Ref<HTMLButtonElement>
 }
 
 export function Button({

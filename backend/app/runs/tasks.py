@@ -58,9 +58,11 @@ async def run_ingest(
     filename: str,
     doc_type: str,
 ) -> None:
-    """入库后台任务：uploading→parsing→extracting→indexing→done。
+    """入库后台任务：uploading→parsing→indexing(向量)→extracting(逐chunk)→indexing→done。
 
     document_id 用源文件名，保证 chunk_id 幂等（与 A 板块同步路由一致）。
+    注：向量写入在抽取之前（writer 的 MENTIONS 依赖 Chunk 节点已存在），故 indexing
+    先出现一次；LLM 抽取按 chunk 逐条发 extracting 进度事件。
     """
     try:
         _emit(store, run_id, Stage.UPLOADING, message=f"接收 {filename}")
@@ -80,22 +82,30 @@ async def run_ingest(
             except OSError:
                 pass
 
-        _emit(store, run_id, Stage.EXTRACTING, message="生成向量并写入图库")
+        _emit(store, run_id, Stage.INDEXING, message="生成向量并写入图库")
         # embed/ingest 是同步阻塞（HTTP/Cypher），包 to_thread 不冻结事件循环
         embeddings = await asyncio.to_thread(embed_chunks, doc)
         await asyncio.to_thread(
             ingest_document, driver, doc, embeddings, name=source_name, source_type=doc_type
         )
 
-        _emit(store, run_id, Stage.INDEXING, message="抽取实体与关系")
-        stats = await asyncio.to_thread(extract_and_ingest, driver, doc)
+        # 抽取是入库最长的一段（每 chunk 一次 LLM 调用，动辄数分钟）。逐 chunk 发
+        # 进度事件，消除前端"卡死"错觉。回调在 to_thread 工作线程内触发，RunStore
+        # 非线程安全，用 call_soon_threadsafe 投递回事件循环线程（同 run_chat 模式）。
+        loop = asyncio.get_running_loop()
 
-        # 抽取完成后先发一条 running 状态的"请刷新"提示（非终态）。
-        # 应对前端 SSE 终态事件丢失场景：即使后续终态事件丢，用户看到此提示即可手动刷新。
-        _emit(
-            store, run_id, Stage.INDEXING,
-            message="入库完成 ✓ 请刷新页面查看",
+        def _extract_progress(index: int, total: int) -> None:
+            event = RunEvent(
+                stage=Stage.EXTRACTING,
+                message=f"正在从分块 {index}/{total} 中抽取实体与关系…",
+            )
+            loop.call_soon_threadsafe(store.append_event, run_id, event)
+
+        stats = await asyncio.to_thread(
+            extract_and_ingest, driver, doc, on_progress=_extract_progress
         )
+
+        _emit(store, run_id, Stage.INDEXING, message="实体与关系已写入图谱")
         _emit(
             store, run_id, Stage.IDLE, RunStatus.SUCCEEDED,
             message=(

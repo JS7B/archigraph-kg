@@ -1,15 +1,25 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError } from '../../api/client'
 import { fetchHealthDeps, type HealthDeps } from '../../api/health'
-import { Card, DataValue, Eyebrow, Panel, StatusBadge } from '../../components/ui'
+import { Card, Panel, StatusBadge } from '../../components/ui'
 import styles from './SettingsView.module.css'
 
 /**
- * 设置页：依赖连通状态 + 模型配置提示 + 样本导入说明。
+ * 设置面板内容：依赖连通状态 + 模型配置提示 + 样本导入说明。
+ * 标题与关闭按钮由外层抽屉（App.tsx）提供，这里只渲染各分区。
  *
  * - 依赖状态调 GET /health/deps 实时探测 Neo4j / LLM（只读展示，前端不改 .env）。
  * - 模型配置在后端 .env，这里只提示用户去配，不在前端修改。
  */
+
+/** 模型配置项：环境变量名 + 中文说明，两列网格对齐展示 */
+const CONFIG_ITEMS: { name: string; desc: string }[] = [
+  { name: 'OPENAI_BASE_URL', desc: 'LLM 服务地址' },
+  { name: 'OPENAI_API_KEY', desc: 'API 密钥' },
+  { name: 'CHAT_MODEL', desc: '对话模型名' },
+  { name: 'EMBEDDING_MODEL', desc: '向量模型名' },
+  { name: 'NEO4J_URI / PASSWORD', desc: 'Neo4j 连接' },
+]
 
 type Neo4jState = { label: string; status: 'success' | 'error' }
 type LlmState = { label: string; status: 'success' | 'warning' }
@@ -54,17 +64,17 @@ export function SettingsView() {
 
   return (
     <div className={styles.settings}>
-      <header className={styles.header}>
-        <Eyebrow>Settings</Eyebrow>
-        <h1 className={styles.title}>设置</h1>
-        <button className={styles.refreshBtn} onClick={() => void refresh()} disabled={loading}>
-          {loading ? '检测中…' : '重新检测'}
-        </button>
-      </header>
-
       {loadError && <div className={styles.errorMsg}>检测失败：{loadError}</div>}
 
-      <Panel eyebrow="Dependencies" title="依赖连通状态">
+      <Panel
+        eyebrow="Dependencies"
+        title="依赖连通状态"
+        actions={
+          <button className={styles.refreshBtn} onClick={() => void refresh()} disabled={loading}>
+            {loading ? '检测中…' : '重新检测'}
+          </button>
+        }
+      >
         <div className={styles.depGrid}>
           <Card padding="md" className={styles.depCard}>
             <div className={styles.depHead}>
@@ -101,13 +111,14 @@ export function SettingsView() {
           模型配置在后端 <code>.env</code> 文件，前端不可直接修改。请编辑仓库根目录的
           <code> .env</code>，设置以下变量后重启后端：
         </p>
-        <div className={styles.configList}>
-          <DataValue label="OPENAI_BASE_URL">LLM 服务地址</DataValue>
-          <DataValue label="OPENAI_API_KEY">API 密钥</DataValue>
-          <DataValue label="CHAT_MODEL">对话模型名</DataValue>
-          <DataValue label="EMBEDDING_MODEL">向量模型名</DataValue>
-          <DataValue label="NEO4J_URI / PASSWORD">Neo4j 连接</DataValue>
-        </div>
+        <dl className={styles.configList}>
+          {CONFIG_ITEMS.map((item) => (
+            <div key={item.name} className={styles.configItem}>
+              <dt className={styles.configName}>{item.name}</dt>
+              <dd className={styles.configDesc}>{item.desc}</dd>
+            </div>
+          ))}
+        </dl>
       </Panel>
 
       <Panel eyebrow="Getting Started" title="样本导入说明">

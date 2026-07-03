@@ -236,7 +236,25 @@ export function GraphView() {
             从知识库的实体与关系中探索，点击节点查看详情，输入名称高亮匹配。
           </p>
         </div>
+      </header>
 
+      <div className={styles.canvasShell} aria-label="知识图谱画布">
+        {loading && <div className={styles.statusMsg}>加载图谱中…</div>}
+        {loadError && <div className={styles.statusMsg}>加载失败：{loadError}</div>}
+        {isEmpty && (
+          <div className={styles.statusMsg}>知识库还没有实体。上传文档并完成入库后，这里会显示实体与关系。</div>
+        )}
+        {/* 数据就绪才挂载 Cytoscape 容器，避免空容器闪烁 */}
+        {!loading && !loadError && graphData && graphData.nodes.length > 0 && (
+          <>
+            <div ref={containerRef} className={styles.canvas} />
+            <div className={styles.canvasNote}>拖拽移动画布，滚轮缩放，点击节点查看详情。</div>
+          </>
+        )}
+      </div>
+
+      {/* 右侧边栏：实体搜索 + 实体详情垂直一列，跨两行贴顶 */}
+      <aside className={styles.sidebar}>
         <Card className={styles.searchCard} padding="md">
           <div className={styles.searchRow}>
             <label className={styles.searchLabel}>
@@ -251,8 +269,9 @@ export function GraphView() {
                 onChange={(event) => setSearchTerm(event.target.value)}
               />
             </label>
+            {/* 刷新是低频次要操作，用 ghost 避免与搜索主任务抢视觉焦点 */}
             <Button
-              variant="primary"
+              variant="ghost"
               disabled={loading}
               onClick={() => void refresh()}
               aria-label="刷新图谱"
@@ -262,23 +281,6 @@ export function GraphView() {
           </div>
           <span className={styles.searchHint}>输入名称会高亮匹配节点，并弱化其他图谱元素。</span>
         </Card>
-      </header>
-
-      <div className={styles.workspace}>
-        <div className={styles.canvasShell} aria-label="知识图谱画布">
-          {loading && <div className={styles.statusMsg}>加载图谱中…</div>}
-          {loadError && <div className={styles.statusMsg}>加载失败：{loadError}</div>}
-          {isEmpty && (
-            <div className={styles.statusMsg}>知识库还没有实体。上传文档并完成入库后，这里会显示实体与关系。</div>
-          )}
-          {/* 数据就绪才挂载 Cytoscape 容器，避免空容器闪烁 */}
-          {!loading && !loadError && graphData && graphData.nodes.length > 0 && (
-            <>
-              <div ref={containerRef} className={styles.canvas} />
-              <div className={styles.canvasNote}>拖拽移动画布，滚轮缩放，点击节点查看详情。</div>
-            </>
-          )}
-        </div>
 
         <Panel className={styles.detailPanel} eyebrow="Entity Detail" title="实体详情">
           {selectedNode ? (
@@ -340,7 +342,7 @@ export function GraphView() {
             </div>
           )}
         </Panel>
-      </div>
+      </aside>
     </section>
   )
 }

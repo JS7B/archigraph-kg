@@ -286,12 +286,12 @@
   - **Conversation/Message 无 document_id，清理需扩展**：现有 `_clean` fixture 按 document_id 前缀清理，会话节点没有该字段，必须加 `conversation_id STARTS WITH 'conv_test'` 清理，否则污染共享库。
   - **turn_index 自增与幂等的张力**：add_message 内部自增 turn_index，导致"连续两次 add 相同内容"会产生两条（turn_index 不同）。真正幂等靠 MERGE by message_id——当前 run_chat 是 BackgroundTask 失败不自动重试，重试场景不存在，幂等是防御性的。
 
-## 2026-07-02 RunEvent 加 seq 序号（注：终态丢失问题实际未解决）
+## 2026-07-02 RunEvent 加 seq 序号（后注：「终态丢失」已澄清为非 bug）
 
-> ⚠️ 此条原副标题为「支撑前端 SSE 断线重连去重」，但前端经多轮尝试（seq 去重、
-> 历史兜底、放行原生重连）后实测**终态事件仍丢失**，问题回到未解决。seq 字段
-> 作为基础设施保留（后端事件确实有序号了），但它要支撑的「前端去重修复终态」
-> 目标未达成。详见 frontend/DEVLOG.md 同日「[未解决] 长任务 SSE 终态事件丢失」。
+> ✅ 2026-07-03 更正：当时以为的「长任务终态事件丢失」经实测澄清为**非 bug**——
+> 实体抽取阶段本身耗时数分钟，终态事件最终会正常到达，此前是没等到任务结束就
+> 误判丢失（详见 frontend/DEVLOG.md 同日更正 + tasks/lessons.md L8）。seq 字段
+> 作为事件基础设施**保留**：Run 内事件有了序号，日后真做断线重连去重时可直接用。
 
 - 做了什么：`RunEvent` 新增 `seq` 字段，由 `RunStore.append_event` 统一赋值
   （Run 内 1 起递增）；stream 与 `/events` 历史接口随 `model_dump` 自动输出。
@@ -306,3 +306,30 @@
 - 为什么这么做：赋值收敛在 `append_event` 单点（而非各 emit 处手填），保证
   连续无洞；不用 SSE 协议层的 `id:`/`Last-Event-ID`（服务端还得实现按 id 跳过
   回放，复杂），客户端按 seq 过滤即可，符合简单优先。
+
+## 2026-07-03 入库抽取阶段逐 chunk 发进度事件（on_progress 回调）
+
+- 做了什么：`extract_document` / `extract_and_ingest` 新增可选 `on_progress(index, total)`
+  回调，每个 chunk 开始抽取前触发；`run_ingest` 借此逐 chunk emit
+  `EXTRACTING` 事件（「正在从分块 3/15 中抽取实体与关系…」）。顺带把
+  阶段语义纠正：向量写入是 `INDEXING`、LLM 抽取是 `EXTRACTING`（此前两者
+  标反了），事件序列变为 uploading→parsing→indexing→extracting(×N)→indexing→idle。
+
+- 这是什么：长任务的细粒度进度上报。抽取阶段每 chunk 一次 LLM 调用，整段
+  动辄数分钟；之前该阶段只发一条事件，前端全程停在同一句提示上，正是
+  「SSE 终态丢失」误诊（见上一条）的错觉来源。
+
+- 为什么需要：SSE 事件流的"活跃感"是用户判断任务没死的唯一依据。chunk 数
+  是天然进度分母，逐 chunk 发一条 message 即可让前端持续看到推进，无需
+  百分比协议或新字段。
+
+- 为什么这么做：回调设计成纯 `Callable[[int, int], None]` 可选参数，extraction
+  层不依赖 runs 层（保持分层）；跨线程 emit 沿用 run_chat 的既有模式——
+  `extract_and_ingest` 跑在 `asyncio.to_thread` 工作线程里，RunStore 非线程
+  安全，回调内用 `loop.call_soon_threadsafe` 把 append_event 投递回事件循环
+  线程。备选方案是让 pipeline 直接持有 store/run_id，但那会让抽取层耦合
+  运行时基础设施，回调更干净。
+
+- 踩了什么坑：无。注意点是阶段顺序里 `INDEXING` 出现两次（向量写入在抽取
+  之前，因 writer 的 MENTIONS 依赖 Chunk 节点已存在），mock 测试的期望
+  序列要同步（tests/routers/test_documents.py）。

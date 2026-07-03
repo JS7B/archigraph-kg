@@ -52,26 +52,15 @@ export function AgentRoom({ stage, events, className }: AgentRoomProps) {
         <div className={styles.shredder} />
 
         {/* 状态道具层：DOM 常驻，roomScenes.css 按 data-stage 显隐 + 驱动运转。
-            全局 class 名（p-xxx，不经 hash），故直接写字符串。 */}
+            全局 class 名（p-xxx，不经 hash），故直接写字符串。
+            只保留问答链路（AgentRoom 唯一真实事件源）能触发的道具：
+            文档处理各 stage（uploading/parsing/extracting/indexing/deleting/
+            rebuilding）的事件只在文档库订阅、从不到达本组件，其道具已删除。 */}
         <div className={styles.props}>
-          {/* uploading：文档从右侧门飞向打印机 */}
-          <div className="prop p-flydoc" />
-          {/* parsing/extracting：打印机吐出的纸 */}
-          <div className="prop p-paper" />
-          <div className="prop p-paper p-paper2" />
-          <div className="prop p-paper p-paper3" />
-          {/* extracting：标签贴纸弹出 */}
-          <div className="prop p-tag" />
-          <div className="prop p-tag p-tag2" />
           {/* linking：两节点连线生长 */}
           <div className="prop p-link" />
-          {/* indexing：档案柜绿光 */}
-          <div className="prop p-cabglow" />
           {/* searching：放大镜 */}
           <div className="prop p-glass" />
-          {/* deleting：碎纸机吞纸 + 碎屑 */}
-          <div className="prop p-shredin" />
-          <div className="prop p-shredout" />
         </div>
 
         {/* 小人：1 个 div + box-shadow 画全部像素（见 drawDude.ts）。

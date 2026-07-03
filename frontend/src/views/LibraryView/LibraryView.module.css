@@ -57,18 +57,20 @@
   gap: var(--space-2);
 }
 
+/* 文档卡片网格：auto-fill 保留空轨道，文档少时卡片不会拉伸占满全宽；
+   窗口变化时自动换行，窄屏回退单列见下方 960px 媒体查询 */
 .list {
-  display: flex;
+  display: grid;
   min-height: 0;
-  flex-wrap: wrap;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  align-content: start;
   gap: var(--space-4);
   overflow: auto;
 }
 
 .documentCard {
   display: flex;
-  min-width: calc(var(--space-8) * 4);
-  flex: 1 1 calc(var(--space-8) * 5);
+  min-width: 0;
   flex-direction: column;
   gap: var(--space-4);
 }
@@ -164,7 +166,7 @@
   line-height: var(--leading-snug);
 }
 
-/* F8 响应式：<860px 头部标题与操作区堆叠（卡片列表本就 wrap，无需改）*/
+/* F8 响应式：<860px 头部标题与操作区堆叠，卡片网格回退单列 */
 @media (max-width: 860px) {
   .header {
     flex-direction: column;
@@ -172,6 +174,10 @@
 
   .actions {
     justify-content: flex-start;
+  }
+
+  .list {
+    grid-template-columns: 1fr;
   }
 }
 
