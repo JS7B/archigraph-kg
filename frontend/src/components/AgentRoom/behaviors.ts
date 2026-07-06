@@ -99,20 +99,21 @@ const IDLE_CHOICES: { kind: IdleKind; weight: number }[] = [
 
 // idle 剧本：把一个空闲选择展开成 1~3 段行为，保留「中断即转」的可打断性。
 function idleScript(kind: IdleKind, rng: () => number): Behavior[] {
+  const linger = 8000 + Math.floor(rng() * 12000)
   if (kind === 'drink') {
     return [
       { x: STATION.coffee, action: 'take-cup', ms: 700 },
       { x: STATION.coffee, action: 'drink', ms: 2200 },
-      { x: STATION.home, action: 'idle-breathe', ms: 1200 },
+      { x: STATION.home, action: 'idle-breathe', ms: Math.max(800, linger - 2900) },
     ]
   }
   if (kind === 'doze') {
-    return [{ x: STATION.desk, action: 'doze', ms: 5000 }]
+    return [{ x: STATION.desk, action: 'doze', ms: linger }]
   }
   if (kind === 'daze') {
-    return [{ x: STATION.home, action: 'daze', ms: 5000 }]
+    return [{ x: STATION.home, action: 'daze', ms: linger }]
   }
-  return [{ x: 12 + Math.floor(rng() * 70), action: 'idle-breathe', ms: 4000 }]
+  return [{ x: 12 + Math.floor(rng() * 70), action: 'idle-breathe', ms: linger }]
 }
 
 // idle：加权随机取下一段空闲剧本。
