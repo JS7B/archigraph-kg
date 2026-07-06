@@ -83,8 +83,11 @@ async def run_ingest(
                 pass
 
         _emit(store, run_id, Stage.INDEXING, message="生成向量并写入图库")
-        # embed/ingest 是同步阻塞（HTTP/Cypher），包 to_thread 不冻结事件循环
-        embeddings = await asyncio.to_thread(embed_chunks, doc)
+        # embed/ingest 是同步阻塞（HTTP/Cypher），包 to_thread 不冻结事件循环。
+        # title 必须显式传源文件名：doc.source_path 是临时文件路径，不能当标题前缀。
+        embeddings = await asyncio.to_thread(
+            lambda: embed_chunks(doc, title=source_name)
+        )
         await asyncio.to_thread(
             ingest_document, driver, doc, embeddings, name=source_name, source_type=doc_type
         )

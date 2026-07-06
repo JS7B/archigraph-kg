@@ -3,6 +3,9 @@
 幂等：Document 按 document_id、Chunk 按确定性 chunk_id（document_id#chunk_index）MERGE，
 重复入库不产生重复节点。每个 Chunk 保留来源位置（char_start/char_end/page/heading_path），
 满足引用可追溯。
+
+注意：Chunk.text 始终存原文（展示/引用用），而 embedding 由 embed_chunks 基于
+「标题 + heading_path + 原文」生成（检索用），两者语义刻意不对称。
 """
 
 from neo4j import Driver

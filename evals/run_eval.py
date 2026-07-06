@@ -214,7 +214,7 @@ def main():
                 continue
             print(f"  解析成功: {parse_info['chunks']} chunks, 偏移完整性={'OK' if not parse_info['offset_broken'] else 'BROKEN'}")
 
-            embeddings = embed_chunks(doc)
+            embeddings = embed_chunks(doc, title=sample_name)
             ingest_document(driver, doc, embeddings, name=sample_name, source_type="markdown")
             print(f"  入库完成: {len(embeddings)} 向量写入")
 
