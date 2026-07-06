@@ -50,8 +50,8 @@ export function AgentRoom({ stage, events, preview = false, className }: AgentRo
             电脑桌+显示器 ｜ 咖啡角 ｜ 打印机 ｜ 档案柜 ｜ 销毁台 */}
         <div className={styles.monitor} />
         <div className={styles.desk} />
-        <div className={`${styles.coffee} coffee-station`} />
-        <div className={`${styles.steam} p-steam`}><i /><i /><i /></div>
+        <div className={styles.coffee} />
+        <div className={styles.steam}><i /><i /><i /></div>
         <div className={styles.printer} />
         <div className={styles.cabinet} />
         <div className={styles.shredder} />
@@ -76,9 +76,7 @@ export function AgentRoom({ stage, events, preview = false, className }: AgentRo
           ref={dudeRef}
           style={{ boxShadow: DUDE_SHADOW }}
         >
-          <span className="p-cup" />
           <span className="p-doc" />
-          <span className="p-face p-face--doze" />
           <span className="p-zzz">z</span>
         </div>
 

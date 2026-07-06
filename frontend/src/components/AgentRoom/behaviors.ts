@@ -40,7 +40,6 @@ export type AgentAction =
   | 'idle-breathe'
   | 'walk'
   | 'carry' // 搬文件走（走 + 手持文件）
-  | 'take-cup' // 咖啡角取杯
   | 'drink' // 咖啡角喝咖啡
   | 'daze' // 原地发呆
   | 'doze' // 打瞌睡（zzz 气泡）
@@ -87,37 +86,16 @@ export function workScript(stage: Stage): Behavior[] | null {
   return s ? s.map((b) => ({ ...b })) : null
 }
 
-type IdleKind = 'daze' | 'wander' | 'drink' | 'doze'
-
-// idle 加权随机候选：行为数据本体在 idleScript() 中展开成多段短剧本。
-const IDLE_CHOICES: { kind: IdleKind; weight: number }[] = [
-  { kind: 'daze', weight: 3 }, // 原地发呆
-  { kind: 'wander', weight: 3 }, // 房间内踱步
-  { kind: 'drink', weight: 2 }, // 走到咖啡角取杯并喝一口
-  { kind: 'doze', weight: 1 }, // 打瞌睡
+// idle 加权随机候选：x=-1 表示随机踱步位置。
+const IDLE_CHOICES: { action: AgentAction; x: number; weight: number }[] = [
+  { action: 'daze', x: STATION.home, weight: 3 }, // 原地发呆
+  { action: 'idle-breathe', x: -1, weight: 3 }, // 房间内踱步（走到随机点后呼吸）
+  { action: 'drink', x: STATION.coffee, weight: 2 }, // 走到咖啡角喝咖啡
+  { action: 'doze', x: STATION.desk, weight: 1 }, // 打瞌睡
 ]
 
-// idle 剧本：把一个空闲选择展开成 1~3 段行为，保留「中断即转」的可打断性。
-function idleScript(kind: IdleKind, rng: () => number): Behavior[] {
-  const linger = 8000 + Math.floor(rng() * 12000)
-  if (kind === 'drink') {
-    return [
-      { x: STATION.coffee, action: 'take-cup', ms: 700 },
-      { x: STATION.coffee, action: 'drink', ms: 2200 },
-      { x: STATION.home, action: 'idle-breathe', ms: Math.max(800, linger - 2900) },
-    ]
-  }
-  if (kind === 'doze') {
-    return [{ x: STATION.desk, action: 'doze', ms: linger }]
-  }
-  if (kind === 'daze') {
-    return [{ x: STATION.home, action: 'daze', ms: linger }]
-  }
-  return [{ x: 12 + Math.floor(rng() * 70), action: 'idle-breathe', ms: linger }]
-}
-
-// idle：加权随机取下一段空闲剧本。
-export function nextIdleScript(rng: () => number): Behavior[] {
+// idle：加权随机取下一个行为；停留 8~20s（行为间隔）。踱步走到 12~82% 的随机点。
+export function nextIdleBehavior(rng: () => number): Behavior {
   const total = IDLE_CHOICES.reduce((sum, c) => sum + c.weight, 0)
   let r = rng() * total
   let chosen = IDLE_CHOICES[0]
@@ -128,7 +106,9 @@ export function nextIdleScript(rng: () => number): Behavior[] {
       break
     }
   }
-  return idleScript(chosen.kind, rng)
+  const ms = 8000 + Math.floor(rng() * 12000) // 8~20s
+  const x = chosen.x === -1 ? 12 + Math.floor(rng() * 70) : chosen.x
+  return { x, action: chosen.action, ms }
 }
 
 // StyleGallery 预览：某 stage 的静态首帧行为（不循环）。有工作剧本用其首帧，否则在

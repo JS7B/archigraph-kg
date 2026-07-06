@@ -165,17 +165,11 @@ export function StyleGallery() {
       {/* AgentRoom — 12 状态全览（预览：静态首帧，不跑循环演出）*/}
       <Section eyebrow="Signature" title="像素档案员 · 12 状态">
         <p className={styles.cardText}>
-          AgentRoom 已升级成更完整的像素小工程师小基地：小人按当前 <code>RunEvent.stage</code>
-          的行为剧本在房间里演出（翻找 / 抱文件走回 / 打字 / 发呆 / 打瞌睡…），位置逐帧插值、
-          中断即转，微动作与手持文件 / 咖啡杯 / zzz 气泡由 <code>data-action</code> 驱动。
-          下方目录为每个状态的**静态首帧**预览（不循环）；真实循环演出请在工作台发起问答观察。
+          深紫调像素小房间：小人按当前 <code>RunEvent.stage</code> 的行为剧本在房间里演出
+          （翻找 / 抱文件走回 / 打字 / 发呆 / 打瞌睡…），位置逐帧插值、中断即转，微动作与
+          手持文件 / zzz 气泡由 <code>data-action</code> 驱动。下方目录为每个状态的**静态首帧**
+          预览（不循环）；真实循环演出请在工作台发起问答观察。
         </p>
-        <ul className={styles.eventList}>
-          <li><DataValue>idle</DataValue> 空闲时会在小基地里呼吸、发呆、巡游或补咖啡。</li>
-          <li><DataValue>searching</DataValue> 资料柜前翻找，再抱着文件回主工位。</li>
-          <li><DataValue>drink</DataValue> 走到咖啡角取杯，喝一口再回到待机节奏。</li>
-          <li><DataValue>doze</DataValue> 闭眼横线 + 小圆口呼吸，zzz 只作辅助提示。</li>
-        </ul>
         <div className={styles.agentGrid}>
           {ALL_STAGES.map((s) => (
             <div key={s} className={styles.agentCell}>

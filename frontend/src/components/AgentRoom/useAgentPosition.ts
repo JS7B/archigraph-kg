@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { Stage } from '../../types'
 import {
   STAGE_HOME,
-  nextIdleScript,
+  nextIdleBehavior,
   previewBehavior,
   workScript,
   type Behavior,
@@ -83,12 +83,9 @@ export function useAgentPosition(stage: Stage, preview = false): AgentPosition {
     const isIdle = stage === 'idle'
     let queue: Behavior[] = []
 
-    // 队列空时续排下一段行为剧本；null = 该 stage 无剧本（error / 文档处理死 stage）→ 静立。
+    // 队列空时续排下一个行为；null = 该 stage 无剧本（error / 文档处理死 stage）→ 静立。
     const refill = (): Behavior | null => {
-      if (isIdle) {
-        queue = nextIdleScript(Math.random)
-        return queue.shift() ?? null
-      }
+      if (isIdle) return nextIdleBehavior(Math.random)
       const script = workScript(stage)
       if (script) {
         queue = script
