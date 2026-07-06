@@ -72,7 +72,7 @@ evals/      评估集与脚本（ground_truth + run_eval.py）
 
 ## 文档
 
-- [`项目说明.md`](项目说明.md)：交接 / 换机器恢复指南（进度、worktree 工作流、已知问题）
+- [`项目说明.md`](项目说明.md)：项目总说明（架构、图谱模型、入库/问答链路、对话记忆、事件流、评估、设计取舍）
 - [`运行说明.md`](运行说明.md)：本地启动完整步骤 + 常见问题
 - [`docs/personal-kg-graphrag-agent-plan.md`](docs/personal-kg-graphrag-agent-plan.md)：总规划（定位、概念模型、图谱设计、流程、API、评估）
 - [`backend/后端说明.md`](backend/后端说明.md) · [`frontend/前端说明.md`](frontend/前端说明.md)：前后端工程实现详解
