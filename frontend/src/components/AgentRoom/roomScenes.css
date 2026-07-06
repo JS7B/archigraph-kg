@@ -55,9 +55,14 @@
   animation: ar-gesture 0.8s ease-in-out infinite;
 }
 
+/* 取杯：到咖啡角后先小幅前探，强调“拿杯子”而不是站位 */
+[data-action='take-cup'] .ar-dude {
+  animation: ar-take-cup 0.7s ease-out infinite;
+}
+
 /* 喝咖啡：periodically 后仰啜一口 */
 [data-action='drink'] .ar-dude {
-  animation: ar-drink 2.4s ease-in-out infinite;
+  animation: ar-drink 2.2s ease-in-out infinite;
 }
 
 /* 发呆：极缓起伏，几乎不动 */
@@ -104,6 +109,10 @@
   0%, 100% { transform: translateY(-1px) rotate(-6deg); }
   50% { transform: translateY(-1px) rotate(6deg); }
 }
+@keyframes ar-take-cup {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-1px) rotate(-8deg); }
+}
 @keyframes ar-drink {
   0%, 70%, 100% { transform: translateY(0) rotate(0deg); }
   85% { transform: translateY(-1px) rotate(-9deg); }
@@ -113,8 +122,8 @@
   50% { transform: translateY(-1px); }
 }
 @keyframes ar-doze {
-  0%, 100% { transform: translateY(0) rotate(-12deg); }
-  50% { transform: translateY(-1px) rotate(-12deg); }
+  0%, 100% { transform: translateY(0) rotate(-10deg) scale(1); }
+  50% { transform: translateY(-1px) rotate(-10deg) scale(1.02, 0.98); }
 }
 @keyframes ar-scratch {
   0%, 100% { transform: translateY(0) rotate(-5deg); }
@@ -126,6 +135,35 @@
 }
 
 /* ═══ 小人随身道具（.ar-dude 的子元素，随小人移动）═══ */
+
+/* 咖啡杯：只在取杯/喝的时候作为随身道具出现 */
+.p-cup {
+  position: absolute;
+  left: 17px;
+  bottom: 4px;
+  width: 7px;
+  height: 7px;
+  background: var(--room-amber, var(--dude-body));
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 1px 1px 2px 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+.p-cup::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  top: 1px;
+  width: 2px;
+  height: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-left: none;
+  border-radius: 0 2px 2px 0;
+}
+[data-action='take-cup'] .p-cup,
+[data-action='drink'] .p-cup {
+  opacity: 1;
+}
 
 /* 手持文件：搬运/翻阅/核对段显示，位于身侧手中 */
 .p-doc {
@@ -157,6 +195,52 @@
 [data-action='read'] .p-doc,
 [data-action='flip'] .p-doc {
   opacity: 1;
+}
+
+/* doze 五官覆盖层：只在打瞌睡时叠加闭眼线和圆口，不改主像素稿。 */
+.p-face--doze {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  width: 12px;
+  height: 8px;
+  background: var(--dude-skin);
+  border-radius: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.p-face--doze::before,
+.p-face--doze::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 4px;
+  height: 1px;
+  background: var(--dude-eye);
+}
+.p-face--doze::before {
+  left: 0;
+}
+.p-face--doze::after {
+  right: 0;
+}
+.p-face--doze {
+  box-shadow: 5px 5px 0 0 var(--dude-mouth);
+}
+[data-action='doze'] .p-face--doze {
+  opacity: 1;
+  animation: ar-doze-face 3.4s ease-in-out infinite;
+}
+@keyframes ar-doze-face {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04, 0.92); }
+}
+
+[data-action='take-cup'] .p-steam,
+[data-action='drink'] .p-steam,
+[data-action='take-cup'] .coffee-station,
+[data-action='drink'] .coffee-station {
+  filter: brightness(1.12);
 }
 
 /* zzz 气泡：打瞌睡时头顶升起的 z */
