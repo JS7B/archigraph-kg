@@ -6,11 +6,25 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.conversations import create_conversation
+from app.conversations import (
+    DEFAULT_TITLE,
+    create_conversation,
+    get_conversation,
+    rename_conversation,
+)
 from app.runs.models import RunKind
 from app.runs.tasks import run_chat
 
 router = APIRouter(prefix="/api", tags=["qa"])
+
+# 会话标题最长字数（首句提问截断）
+_TITLE_MAX_LEN = 20
+
+
+def _derive_title(question: str) -> str:
+    """从首句提问派生会话标题：压缩空白后截断 20 字，空问题回退缺省标题。"""
+    compact = " ".join(question.split())
+    return compact[:_TITLE_MAX_LEN] or DEFAULT_TITLE
 
 
 class ChatRequest(BaseModel):
@@ -53,8 +67,17 @@ async def chat(
     # 同步解析会话 id（避免异步任务未跑完前端拿不到 id）
     conversation_id = body.conversation_id
     if conversation_id is None:
-        conversation = create_conversation(driver, title=body.question[:30])
+        conversation = create_conversation(driver, title=_derive_title(body.question))
         conversation_id = conversation.conversation_id
+    else:
+        # 「新建」按钮建的空会话仍是缺省标题：首问时用问题命名（手动改过名则不覆盖）
+        conversation = get_conversation(driver, conversation_id)
+        if (
+            conversation is not None
+            and conversation.message_count == 0
+            and conversation.title == DEFAULT_TITLE
+        ):
+            rename_conversation(driver, conversation_id, _derive_title(body.question))
     run = store.create_run(RunKind.CHAT)
     background_tasks.add_task(
         run_chat, driver, store, run.id, body.question, conversation_id

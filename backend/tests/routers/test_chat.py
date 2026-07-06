@@ -49,6 +49,11 @@ def _fake_create_conversation(driver, *, title="新会话"):
 def _patch_run_chat(monkeypatch):
     monkeypatch.setattr(chat_mod, "run_chat", _fake_run_chat)
     monkeypatch.setattr(chat_mod, "create_conversation", _fake_create_conversation)
+    # 追问路径会查/改会话标题，默认 mock 成"会话不存在"（不真连库）
+    monkeypatch.setattr(chat_mod, "get_conversation", lambda driver, cid: None)
+    monkeypatch.setattr(
+        chat_mod, "rename_conversation", lambda driver, cid, title: None
+    )
 
 
 def _client():
@@ -78,6 +83,70 @@ def test_chat_with_existing_conversation():
     )
     assert resp.status_code == 200
     assert resp.json()["conversationId"] == "conv_test_existing"
+
+
+def test_chat_first_question_titles_conversation(monkeypatch):
+    """首问自动建会话：标题 = 首句提问截断 20 字。"""
+    captured = {}
+
+    def _capture_create(driver, *, title="新会话"):
+        captured["title"] = title
+        return Conversation(conversation_id="conv_test_fake", title=title)
+
+    monkeypatch.setattr(chat_mod, "create_conversation", _capture_create)
+    client, _ = _client()
+    question = "这是一句超过二十个字的很长很长的提问内容用来验证截断"
+    resp = client.post("/api/chat", json={"question": question})
+    assert resp.status_code == 200
+    assert captured["title"] == question[:20]
+
+
+def test_chat_renames_default_titled_empty_conversation(monkeypatch):
+    """「新建」出的空会话（缺省标题）首问时用问题改名。"""
+    renamed = {}
+    monkeypatch.setattr(
+        chat_mod,
+        "get_conversation",
+        lambda driver, cid: Conversation(
+            conversation_id=cid, title="新会话", message_count=0
+        ),
+    )
+    monkeypatch.setattr(
+        chat_mod,
+        "rename_conversation",
+        lambda driver, cid, title: renamed.update({"id": cid, "title": title}),
+    )
+    client, _ = _client()
+    resp = client.post(
+        "/api/chat",
+        json={"question": "第一句提问", "conversationId": "conv_test_empty"},
+    )
+    assert resp.status_code == 200
+    assert renamed == {"id": "conv_test_empty", "title": "第一句提问"}
+
+
+def test_chat_keeps_custom_title_on_first_question(monkeypatch):
+    """空会话但标题已被手动改过：首问不覆盖。"""
+    renamed = {}
+    monkeypatch.setattr(
+        chat_mod,
+        "get_conversation",
+        lambda driver, cid: Conversation(
+            conversation_id=cid, title="我的自定义标题", message_count=0
+        ),
+    )
+    monkeypatch.setattr(
+        chat_mod,
+        "rename_conversation",
+        lambda driver, cid, title: renamed.update({"title": title}),
+    )
+    client, _ = _client()
+    resp = client.post(
+        "/api/chat",
+        json={"question": "第一句提问", "conversationId": "conv_test_custom"},
+    )
+    assert resp.status_code == 200
+    assert renamed == {}
 
 
 def test_chat_sse_terminal_event_carries_answer():

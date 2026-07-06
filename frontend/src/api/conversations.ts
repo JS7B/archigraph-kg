@@ -23,6 +23,13 @@ export async function getConversation(id: string): Promise<ConversationDetail> {
   return apiFetch<ConversationDetail>(`/api/conversations/${id}`)
 }
 
+export async function renameConversation(id: string, title: string): Promise<Conversation> {
+  return apiFetch<Conversation>(`/api/conversations/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title }),
+  })
+}
+
 export async function deleteConversation(id: string): Promise<void> {
   // DELETE 后端返回 {deleted:true}（清单 §2.2，会话删除较轻走同步）。
   // 用 fetch + res.ok 判断，避免 apiFetch 对可能无 body 的 204 做 res.json() 失败；

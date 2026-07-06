@@ -4,6 +4,7 @@ import {
   listConversations,
   createConversation,
   getConversation,
+  renameConversation,
   deleteConversation,
 } from '../../api/conversations'
 import { ChatThread } from '../../components/ChatThread/ChatThread'
@@ -123,6 +124,18 @@ export function WorkbenchView() {
     }
   }
 
+  // 重命名会话：调后端 PATCH，成功后更新列表项标题。
+  async function handleRename(id: string, title: string) {
+    try {
+      const updated = await renameConversation(id, title)
+      setConversations((prev) =>
+        prev.map((c) => (c.conversationId === id ? { ...c, title: updated.title } : c)),
+      )
+    } catch {
+      // 重命名失败静默（保持原标题）
+    }
+  }
+
   // 删除会话：从列表移除；删的是当前会话则清空、回到空态。
   async function handleDelete(id: string) {
     try {
@@ -141,6 +154,17 @@ export function WorkbenchView() {
   // 提问：必须有当前 conversationId；POST /api/chat 带会话 id，响应的 conversationId 存住。
   async function handleSend(question: string) {
     if (!conversationId) return // 无会话不响应（侧边栏空态引导先新建）
+
+    // 首问时后端会用问题给缺省标题的空会话命名（截断 20 字）：侧边栏乐观同步，
+    // 终态 refreshList 再以后端为准对齐（手动改过名的后端不覆盖，刷新会还原）。
+    if (messages.length === 0) {
+      const title = question.split(/\s+/).join(' ').slice(0, 20)
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.conversationId === conversationId && c.title === '新会话' ? { ...c, title } : c,
+        ),
+      )
+    }
 
     // 先把用户问题立即显示出来，再起 Run。
     setMessages((prev) => [
@@ -186,6 +210,7 @@ export function WorkbenchView() {
         loading={convLoading}
         onSelect={handleSelect}
         onCreate={handleCreate}
+        onRename={handleRename}
         onDelete={handleDelete}
       />
 

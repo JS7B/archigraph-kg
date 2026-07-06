@@ -11,6 +11,7 @@ from app.conversations import (
     get_conversation,
     get_messages,
     list_conversations,
+    rename_conversation,
 )
 from app.qa.models import Citation
 
@@ -152,6 +153,21 @@ def test_list_conversations_descending(ensured_schema):
     # 至少有这俩，按 created_at 降序
     assert len(test_convs) >= 2
     assert test_convs[0].created_at >= test_convs[1].created_at
+
+
+def test_rename_conversation(ensured_schema):
+    driver = ensured_schema
+    conv = _create_test_conversation(driver, title="旧标题")
+    renamed = rename_conversation(driver, conv.conversation_id, "新标题")
+    assert renamed is not None
+    assert renamed.title == "新标题"
+    assert renamed.conversation_id == conv.conversation_id
+    # 落库生效
+    assert get_conversation(driver, conv.conversation_id).title == "新标题"
+
+
+def test_rename_nonexistent_returns_none(ensured_schema):
+    assert rename_conversation(ensured_schema, "conv_test_不存在", "标题") is None
 
 
 def test_delete_conversation(ensured_schema):

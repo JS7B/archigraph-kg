@@ -56,7 +56,7 @@
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
-  padding-right: 28px; /* 给删除按钮留位 */
+  padding-right: 52px; /* 给重命名 + 删除按钮留位 */
   border-radius: var(--radius);
   border: 1px solid transparent;
   background: transparent;
@@ -101,7 +101,8 @@
   line-height: var(--leading-tight);
 }
 
-.delBtn {
+.delBtn,
+.renameBtn {
   position: absolute;
   top: 50%;
   right: var(--space-1);
@@ -123,8 +124,15 @@
     color var(--duration-fast) var(--ease-out);
 }
 
+.renameBtn {
+  right: 28px;
+  font-size: var(--text-sm);
+}
+
 .item:hover .delBtn,
-.item:focus-within .delBtn {
+.item:focus-within .delBtn,
+.item:hover .renameBtn,
+.item:focus-within .renameBtn {
   opacity: 1;
 }
 
@@ -133,9 +141,34 @@
   color: var(--color-error);
 }
 
-.delBtn:focus-visible {
+.renameBtn:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.delBtn:focus-visible,
+.renameBtn:focus-visible {
   outline: none;
   opacity: 1;
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+/* 行内重命名输入框（替换标题位置） */
+.editInput {
+  width: 100%;
+  padding: 2px var(--space-1);
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-snug);
+}
+
+.editInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
   box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 

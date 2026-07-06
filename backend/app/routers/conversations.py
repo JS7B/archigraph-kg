@@ -1,4 +1,4 @@
-"""会话 CRUD 路由：多轮对话记忆的会话管理（列表/新建/详情/删除）。
+"""会话 CRUD 路由：多轮对话记忆的会话管理（列表/新建/详情/改名/删除）。
 
 响应用 camelCase alias（by_alias=True），与 chat 路由风格一致。删除走同步模式
 （清单 §2.2，会话删除较轻），返回 {deleted:true}。
@@ -13,6 +13,7 @@ from app.conversations import (
     get_conversation,
     get_messages,
     list_conversations,
+    rename_conversation,
 )
 from app.qa.models import Citation
 
@@ -21,6 +22,10 @@ router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 class CreateConversationRequest(BaseModel):
     title: str | None = None
+
+
+class RenameConversationRequest(BaseModel):
+    title: str
 
 
 class ConversationItem(BaseModel):
@@ -118,6 +123,26 @@ async def get_conversation_endpoint(request: Request, conversation_id: str) -> d
             )
             for m in messages
         ],
+    ).model_dump(by_alias=True)
+
+
+@router.patch("/{conversation_id}")
+async def rename_conversation_endpoint(
+    request: Request, conversation_id: str, body: RenameConversationRequest
+) -> dict:
+    """改会话标题。空白标题 422，会话不存在 404，成功返回更新后的会话项。"""
+    driver = request.app.state.neo4j
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="标题不能为空")
+    conv = rename_conversation(driver, conversation_id, title)
+    if conv is None:
+        raise HTTPException(status_code=404, detail=f"会话不存在: {conversation_id}")
+    return ConversationItem(
+        conversation_id=conv.conversation_id,
+        title=conv.title,
+        created_at=conv.created_at,
+        message_count=conv.message_count,
     ).model_dump(by_alias=True)
 
 

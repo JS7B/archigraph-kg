@@ -17,6 +17,9 @@ from neo4j import Driver
 from app.conversations.models import Conversation, Message
 from app.qa.models import Citation
 
+# 新建会话的缺省标题；首问时若仍是它则用问题改名（见 routers/chat.py）。
+DEFAULT_TITLE = "新会话"
+
 _CREATE = """
 MERGE (cv:Conversation {conversation_id: $conversation_id})
   SET cv.title = $title,
@@ -72,6 +75,13 @@ RETURN cv.conversation_id AS conversation_id, cv.title AS title,
        cv.created_at AS created_at, cv.message_count AS message_count
 """
 
+_RENAME = """
+MATCH (cv:Conversation {conversation_id: $conversation_id})
+SET cv.title = $title
+RETURN cv.conversation_id AS conversation_id, cv.title AS title,
+       cv.created_at AS created_at, cv.message_count AS message_count
+"""
+
 _DELETE = """
 MATCH (cv:Conversation {conversation_id: $conversation_id})
 OPTIONAL MATCH (cv)-[:HAS_MESSAGE]->(m:Message)
@@ -101,7 +111,7 @@ def _row_to_message(row: dict) -> Message:
 
 
 def create_conversation(
-    driver: Driver, *, title: str = "新会话", database: str = "neo4j"
+    driver: Driver, *, title: str = DEFAULT_TITLE, database: str = "neo4j"
 ) -> Conversation:
     """新建会话，返回 Conversation。conversation_id 用 conv_ 前缀 + 12 位 hex。"""
     conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
@@ -174,6 +184,16 @@ def get_conversation(
     """取单个会话，不存在返回 None。"""
     records, _, _ = driver.execute_query(
         _GET_CONVERSATION, conversation_id=conversation_id, database_=database
+    )
+    return Conversation(**records[0].data()) if records else None
+
+
+def rename_conversation(
+    driver: Driver, conversation_id: str, title: str, *, database: str = "neo4j"
+) -> Conversation | None:
+    """改会话标题，返回更新后的 Conversation；会话不存在返回 None。"""
+    records, _, _ = driver.execute_query(
+        _RENAME, conversation_id=conversation_id, title=title, database_=database
     )
     return Conversation(**records[0].data()) if records else None
 

@@ -107,6 +107,32 @@ def test_get_conversation_not_found(ensured_schema):
     assert resp.status_code == 404
 
 
+def test_rename_conversation_endpoint(ensured_schema):
+    cid = _seed_test_conversation(ensured_schema, title="旧名字")
+    client, _ = _client(ensured_schema)
+    resp = client.patch(f"/api/conversations/{cid}", json={"title": "  新名字  "})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["conversationId"] == cid
+    assert body["title"] == "新名字"  # 前后空白被 strip
+    # 详情接口读到新标题
+    assert client.get(f"/api/conversations/{cid}").json()["title"] == "新名字"
+
+
+def test_rename_conversation_blank_title(ensured_schema):
+    cid = _seed_test_conversation(ensured_schema, title="保持原名")
+    client, _ = _client(ensured_schema)
+    resp = client.patch(f"/api/conversations/{cid}", json={"title": "   "})
+    assert resp.status_code == 422
+    assert client.get(f"/api/conversations/{cid}").json()["title"] == "保持原名"
+
+
+def test_rename_conversation_not_found(ensured_schema):
+    client, _ = _client(ensured_schema)
+    resp = client.patch("/api/conversations/conv_test_不存在", json={"title": "x"})
+    assert resp.status_code == 404
+
+
 def test_delete_conversation_endpoint(ensured_schema):
     cid = _seed_test_conversation(ensured_schema, title="待删")
     client, _ = _client(ensured_schema)

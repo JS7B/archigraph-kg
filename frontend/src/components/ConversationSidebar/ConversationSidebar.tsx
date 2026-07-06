@@ -11,12 +11,14 @@ interface ConversationSidebarProps {
   onSelect: (id: string) => void
   /** 新建会话。 */
   onCreate: () => void
+  /** 重命名会话（内部已做行内编辑与空标题过滤）。 */
+  onRename: (id: string, title: string) => void
   /** 删除会话（内部已做二次确认）。 */
   onDelete: (id: string) => void
 }
 
 /**
- * 会话侧边栏：会话列表 + 新建 + 切换 + 删除（带二次确认）。
+ * 会话侧边栏：会话列表 + 新建 + 切换 + 重命名（行内编辑）+ 删除（带二次确认）。
  * 复用现有 UI 基件与 tokens，风格对齐 Linear/Notion 工程感。
  * 无障碍：会话项可键盘聚焦、:focus-visible 焦点环、aria-label；删除二次确认对话框可达。
  */
@@ -26,15 +28,33 @@ export function ConversationSidebar({
   loading = false,
   onSelect,
   onCreate,
+  onRename,
   onDelete,
 }: ConversationSidebarProps) {
   // 待确认删除的会话 id（非空时弹出确认框）。
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  // 行内编辑中的会话 id 与草稿标题（非空时该项标题替换为输入框）。
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
 
   function confirmDelete() {
     if (pendingDelete) {
       onDelete(pendingDelete)
       setPendingDelete(null)
+    }
+  }
+
+  function startEdit(c: Conversation) {
+    setEditingId(c.conversationId)
+    setDraft(c.title)
+  }
+
+  // 提交编辑：空白标题视为取消（保留原名）。
+  function commitEdit() {
+    if (editingId) {
+      const title = draft.trim()
+      if (title) onRename(editingId, title)
+      setEditingId(null)
     }
   }
 
@@ -72,10 +92,43 @@ export function ConversationSidebar({
                     }
                   }}
                 >
-                  <span className={styles.itemTitle}>{c.title}</span>
+                  {editingId === c.conversationId ? (
+                    <input
+                      className={styles.editInput}
+                      value={draft}
+                      autoFocus
+                      aria-label="会话标题"
+                      onChange={(e) => setDraft(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={commitEdit}
+                      onKeyDown={(e) => {
+                        // 阻止冒泡到会话项的 Enter/空格选中；输入法选词回车不提交。
+                        e.stopPropagation()
+                        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                          e.preventDefault()
+                          commitEdit()
+                        } else if (e.key === 'Escape') {
+                          setEditingId(null)
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className={styles.itemTitle}>{c.title}</span>
+                  )}
                   <span className={styles.itemMeta}>
                     {formatTime(c.createdAt)} · {c.messageCount} 条
                   </span>
+                  <button
+                    type="button"
+                    className={styles.renameBtn}
+                    aria-label={`重命名会话 ${c.title}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      startEdit(c)
+                    }}
+                  >
+                    ✎
+                  </button>
                   <button
                     type="button"
                     className={styles.delBtn}
