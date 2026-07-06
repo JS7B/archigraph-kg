@@ -21,6 +21,7 @@ const COLOR: Record<string, string> = {
   s: 'var(--dude-skin)',  // 肤色
   e: 'var(--dude-eye)',   // 眼睛/瞳
   g: 'var(--dude-glass)', // 眼镜框（档案员辨识特征）
+  m: 'var(--dude-mouth)', // 嘴部
   b: 'var(--dude-body)',  // 卫衣主色（橙，焦点色）
   B: 'var(--dude-body-hi)', // 卫衣高光（粉，右侧受光强侧）
   d: 'var(--dude-body-lo)', // 卫衣暗面（左侧受光弱侧）
@@ -28,14 +29,14 @@ const COLOR: Record<string, string> = {
 }
 
 // 8列×8行 像素图案。字符：. 透明 | 其余见 COLOR。
-// 第4行 .gseseg. —— g 眼镜框框住 e 眼睛（左 g-s-e-s-e-g 右）。
-// 卫衣两行做三段受光：左列 d 暗面 → 中 b 主色 → 右 B 高光，造圆柱体积（视觉升级）。
+// 第4行 .geseg.. —— g 眼镜框与 e 眼睛形成更明确的五官。
+// 第5行加入 m 嘴部，让常态也能看出面部落点；后续 doze 再叠加状态五官层。
 const PATTERN: string[] = [
-  '...hh...',
-  '..hhhh..',
-  '..hsssh.', // 额发 + 脸
-  '..gsesg.', // 眼镜框 + 眼（g 框住 e）
-  '..sssss.', // 脸下半
+  '..hhh...',
+  '.hhhhh..',
+  '.hssss..', // 额发 + 脸
+  '.geseg..', // 眼镜框 + 眼
+  '.ssmss..', // 脸下半 + 嘴部
   '..dbBBb.', // 卫衣（左 d 暗面 / 右 B 高光，三段受光造体积）
   '..dbbbb.',
   '..ll.ll.', // 腿（悬浮，短腿）
