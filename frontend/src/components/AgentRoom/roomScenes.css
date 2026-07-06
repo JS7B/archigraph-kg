@@ -122,8 +122,8 @@
   50% { transform: translateY(-1px); }
 }
 @keyframes ar-doze {
-  0%, 100% { transform: translateY(0) rotate(-12deg); }
-  50% { transform: translateY(-1px) rotate(-12deg); }
+  0%, 100% { transform: translateY(0) rotate(-10deg) scale(1); }
+  50% { transform: translateY(-1px) rotate(-10deg) scale(1.02, 0.98); }
 }
 @keyframes ar-scratch {
   0%, 100% { transform: translateY(0) rotate(-5deg); }
@@ -195,6 +195,43 @@
 [data-action='read'] .p-doc,
 [data-action='flip'] .p-doc {
   opacity: 1;
+}
+
+/* doze 五官覆盖层：只在打瞌睡时叠加闭眼线和圆口，不改主像素稿。 */
+.p-face--doze {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  width: 12px;
+  height: 8px;
+  opacity: 0;
+  pointer-events: none;
+}
+.p-face--doze::before,
+.p-face--doze::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 4px;
+  height: 1px;
+  background: var(--dude-eye);
+}
+.p-face--doze::before {
+  left: 0;
+}
+.p-face--doze::after {
+  right: 0;
+}
+.p-face--doze {
+  box-shadow: 5px 5px 0 0 var(--dude-mouth);
+}
+[data-action='doze'] .p-face--doze {
+  opacity: 1;
+  animation: ar-doze-face 3.4s ease-in-out infinite;
+}
+@keyframes ar-doze-face {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04, 0.92); }
 }
 
 [data-action='take-cup'] .p-steam,

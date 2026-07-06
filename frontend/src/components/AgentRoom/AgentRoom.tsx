@@ -78,6 +78,7 @@ export function AgentRoom({ stage, events, preview = false, className }: AgentRo
         >
           <span className="p-cup" />
           <span className="p-doc" />
+          <span className="p-face p-face--doze" />
           <span className="p-zzz">z</span>
         </div>
 
