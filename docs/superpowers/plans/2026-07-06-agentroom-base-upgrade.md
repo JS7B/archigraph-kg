@@ -101,6 +101,10 @@ git commit -m "feat(frontend): redraw pixel engineer silhouette"
 - Modify: `frontend/src/components/AgentRoom/roomScenes.css`
 - Modify: `frontend/src/components/AgentRoom/useAgentPosition.ts`
 
+**Implementation Notes:**
+- 当前 idle 机制只返回单段 `Behavior`；`drink` 要做成“取杯 -> 喝 -> 停顿”，必须同步小幅扩展 `useAgentPosition.ts` 的队列消费逻辑，不能只改 CSS。
+- 计划中的 `.coffee-station` / `.p-steam` 是示意名，不是现有真实选择器。实施时应在 `AgentRoom.tsx` 给咖啡角/蒸汽节点补稳定类名或 `data-*` 属性，再由 `roomScenes.css` 命中；不要硬套示例类名。
+
 - [ ] **Step 1: 写出咖啡交互的失败标准**
 
 ```text
@@ -217,15 +221,15 @@ export function idleScript(kind: 'drink' | 'daze' | 'doze' | 'wander', rng: () =
 在同一文件增加：
 
 ```css
-[data-action='take-cup'] .p-steam,
-[data-action='drink'] .p-steam,
-[data-action='take-cup'] .coffee-station,
-[data-action='drink'] .coffee-station {
+[data-action='take-cup'] .coffee-steam,
+[data-action='drink'] .coffee-steam,
+[data-action='take-cup'] .coffee-node,
+[data-action='drink'] .coffee-node {
   filter: brightness(1.12);
 }
 ```
 
-如果现有类名不是 `coffee-station` / `p-steam`，按实际 CSS Module 导出的稳定全局类或属性选择器等价实现，但不要引入新的命名体系。
+这里的 `coffee-node` / `coffee-steam` 仍然只是建议命名。若现有 DOM 尚无稳定选择器，先在 `AgentRoom.tsx` 补全局类名或 `data-prop="coffee"` / `data-prop="steam"` 之类的稳定钩子，再由 `roomScenes.css` 使用它们；不要直接依赖 CSS Module 哈希类名。
 
 - [ ] **Step 7: 验证咖啡互动已可读**
 

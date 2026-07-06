@@ -22,6 +22,11 @@
 只有当前端实施发现“必须新增 stage / 必须新增事件字段 / 必须重命名 stage”时，
 再通知大脑决定是否派后端补充清单。
 
+## 开工前两条实现提醒
+
+1. `drink` 不是单纯样式问题。当前 idle 机制只返回单段 `Behavior`，要做成“取杯 -> 喝 -> 停顿”，需要同时小幅修改 `behaviors.ts` 和 `useAgentPosition.ts`，把 idle 也接到可消费的短剧本队列上。
+2. 不要硬套计划里示意性的 `.coffee-station` / `.p-steam`。现状咖啡角和蒸汽节点在 `AgentRoom.module.css` 里走 CSS Module，前端实施时应先在 `AgentRoom.tsx` 补稳定类名或 `data-*` 属性，再让 `roomScenes.css` 用这些稳定钩子做“被取用感”。
+
 ## 要改的文件
 
 - `frontend/src/components/AgentRoom/drawDude.ts`
