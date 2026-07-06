@@ -45,22 +45,25 @@
   /* Agent 房间 · 深紫调「夜间小剧场」
      作为浅色专业工作台里一块深色对比区（参考 ZCodeRoom）。
      小人卫衣/气泡强调复用 --color-accent 系，保持品牌一致。 */
-  --room-bg: #1e1b2e;            /* 房间底色 */
-  --room-top: #2a2348;           /* 渐变上（夜空） */
-  --room-bot: #1a1530;           /* 渐变下 */
-  --room-ground: #3a2f5c;        /* 地面色（条纹主色） */
-  --room-ground-2: #342a52;      /* 地面色（条纹间色） */
+  --room-bg: #181426;            /* 房间底色 */
+  --room-top: #201c33;           /* 渐变上（夜空） */
+  --room-bot: #13111f;           /* 渐变下 */
+  --room-ground: #171426;        /* 地面色（条纹主色） */
+  --room-ground-2: #1f1a31;      /* 地面色（条纹间色） */
   --room-line: #4a3f70;          /* 房间分隔线 */
   --room-line-2: #5e4f8e;        /* 房间实体描边 */
   --room-accent: #c19eff;        /* 房间强调（紫，亮于 --color-accent 适配深底） */
   --room-text: #f0e9ff;          /* 房间内文字 */
   --room-dim: #9a8fc4;           /* 房间内次要文字 */
   --room-green: #7fd1a0;         /* 房间绿（指示灯/完成辉光） */
-  --room-cyan: #6ec3ff;          /* 房间青（扫描线/连线/放大镜） */
+  --room-cyan: #63d4ff;          /* 房间青（扫描线/连线/放大镜） */
+  --room-cyan-soft: rgba(99, 212, 255, 0.18);
+  --room-amber: #f0b35e;
+  --room-amber-soft: rgba(240, 179, 94, 0.22);
   /* 夜间小剧场光影分层（视觉升级：暖冷对比 + 环境紫辉 + 角色浮起）
      取向参考 ui-ux-pro-max 的 Modern-Dark/Cinema + night-indigo/dream-violet。 */
   --room-ambient: rgba(124, 58, 237, 0.16); /* 环境紫辉（dream violet 氛围光） */
-  --room-lamp: rgba(230, 150, 70, 0.16);    /* 桌灯暖光池（琥珀，暖冷对比的暖侧） */
+  --room-lamp: rgba(240, 179, 94, 0.22);    /* 桌灯暖光池（琥珀，暖冷对比的暖侧） */
   --room-rim: rgba(255, 255, 255, 0.10);    /* 家具顶缘统一高光（材质一致） */
   --room-shelf: rgba(94, 79, 142, 0.10);    /* 背墙档案架剪影（纵深） */
   /* 小人配色（场景叙事版：多彩活泼，让小人在深紫房间跳成焦点）
@@ -70,9 +73,9 @@
   --dude-eye: #222222;
   --dude-glass: #2a2540;         /* 眼镜框（档案员辨识特征） */
   --dude-mouth: #6b3f2b;
-  --dude-body: #ffb347;          /* 卫衣主色（橙，焦点色） */
-  --dude-body-hi: #ff6b9d;       /* 卫衣高光（粉，体积感） */
-  --dude-body-lo: #d97a2b;       /* 卫衣暗面（左侧受光弱侧，造体积） */
+  --dude-body: #f08a4b;          /* 卫衣主色（橙，焦点色） */
+  --dude-body-hi: #ffb17a;       /* 卫衣高光（暖亮边） */
+  --dude-body-lo: #b45f2f;       /* 卫衣暗面（左侧受光弱侧，造体积） */
   --dude-leg: #2a2540;
   /* 道具配色 */
   --prop-doc: #fef9e7;           /* 文档纸色 */
