@@ -98,7 +98,7 @@ const MessageItem = memo(function MessageItem({
 
   return (
     <article className={`${styles.message} ${styles.agent}`}>
-      <div className={styles.meta}>GraphRAG Agent</div>
+      <div className={styles.meta}>Archigraph Agent</div>
       <Card className={styles.agentCard} padding="md">
         <div className={styles.answerText}>
           <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={components}>

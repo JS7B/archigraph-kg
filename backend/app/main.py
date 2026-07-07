@@ -78,7 +78,7 @@ def _ensure_vector_index_dim(driver, index_name: str) -> None:
 
 def create_app() -> FastAPI:
     setup_logging()
-    app = FastAPI(title="GraphRAG KG Agent API", lifespan=lifespan)
+    app = FastAPI(title="Archigraph API", lifespan=lifespan)
     register_exception_handlers(app)
     _register_middleware(app)
     app.include_router(health_router)
