@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch, ApiError } from '../../api/client'
 import {
   listConversations,
@@ -20,6 +20,7 @@ import type {
   Citation,
   Conversation,
   ConversationMessage,
+  RunEvent,
 } from '../../types'
 import styles from './WorkbenchView.module.css'
 
@@ -29,29 +30,45 @@ export function WorkbenchView() {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [convLoading, setConvLoading] = useState(true)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const listRequestGeneration = useRef(0)
 
   // 运行状态（SSE）
   const [chatRunId, setChatRunId] = useState<string | null>(null)
-  const { events, currentStage, error } = useRunEvents(chatRunId)
   const [activeChunkId, setActiveChunkId] = useState<string | null>(null)
 
   // 首次进入：加载会话列表（默认不自动选，空态引导「新建会话开始」）。
   const refreshList = useCallback(async () => {
+    const generation = ++listRequestGeneration.current
     setConvLoading(true)
     try {
       const { items } = await listConversations()
+      if (generation !== listRequestGeneration.current) return
       setConversations(items)
     } catch {
+      if (generation !== listRequestGeneration.current) return
       // 拉取失败保持空列表，不抛错扰民（侧边栏会显示空态）
       setConversations([])
     } finally {
-      setConvLoading(false)
+      if (generation === listRequestGeneration.current) setConvLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    void refreshList()
-  }, [refreshList])
+    const generation = ++listRequestGeneration.current
+    listConversations()
+      .then(({ items }) => {
+        if (generation === listRequestGeneration.current) setConversations(items)
+      })
+      .catch(() => {
+        if (generation === listRequestGeneration.current) setConversations([])
+      })
+      .finally(() => {
+        if (generation === listRequestGeneration.current) setConvLoading(false)
+      })
+    return () => {
+      if (generation === listRequestGeneration.current) listRequestGeneration.current += 1
+    }
+  }, [])
 
   // ConversationMessage → ChatMessage 转换（让历史回灌复用现有渲染/角标逻辑）。
   const toChatMessages = useCallback((list: ConversationMessage[]): ChatMessage[] => {
@@ -66,34 +83,33 @@ export function WorkbenchView() {
     }))
   }, [])
 
-  // 终态事件到达后，把答案/错误落成一条 agent 消息，并结束本次 Run 订阅。
-  // 关键：只清 chatRunId 解除 busy，不清 conversationId（会话要保留供追问）。
-  useEffect(() => {
-    if (!chatRunId) return
-    const last = events[events.length - 1]
-    if (!last) return
-
-    if (last.status === 'succeeded' && last.answer) {
+  const handleTerminal = useCallback((event: RunEvent) => {
+    if (event.status === 'succeeded' && event.answer) {
       setMessages((prev) => [
         ...prev,
-        { id: `a-${last.timestampMs}`, role: 'agent', text: last.answer!.text, answer: last.answer! },
+        { id: `a-${event.timestampMs}`, role: 'agent', text: event.answer!.text, answer: event.answer! },
       ])
       setChatRunId(null)
       // 终态后刷新侧边栏（messageCount/title 更新）
       void refreshList()
-    } else if (last.status === 'failed') {
+    } else if (event.status === 'failed') {
       setMessages((prev) => [
         ...prev,
-        { id: `a-${last.timestampMs}`, role: 'agent', text: `回答失败：${last.message}` },
+        { id: `a-${event.timestampMs}`, role: 'agent', text: `回答失败：${event.message}` },
       ])
       setChatRunId(null)
     }
-  }, [events, chatRunId, refreshList])
+  }, [refreshList])
+
+  // 关键：只清 chatRunId 解除 busy，不清 conversationId（会话要保留供追问）。
+  const { events, currentStage, error } = useRunEvents(chatRunId, { onTerminal: handleTerminal })
 
   // 新建会话：拿到 id → 设为当前 → 清空 messages → 侧边栏 unshift。
   async function handleCreate() {
     try {
       const detail = await createConversation()
+      listRequestGeneration.current += 1
+      setConvLoading(false)
       setConversationId(detail.conversationId)
       setMessages([])
       setConversations((prev) => [
@@ -128,6 +144,8 @@ export function WorkbenchView() {
   async function handleRename(id: string, title: string) {
     try {
       const updated = await renameConversation(id, title)
+      listRequestGeneration.current += 1
+      setConvLoading(false)
       setConversations((prev) =>
         prev.map((c) => (c.conversationId === id ? { ...c, title: updated.title } : c)),
       )
@@ -140,6 +158,8 @@ export function WorkbenchView() {
   async function handleDelete(id: string) {
     try {
       await deleteConversation(id)
+      listRequestGeneration.current += 1
+      setConvLoading(false)
       setConversations((prev) => prev.filter((c) => c.conversationId !== id))
       if (id === conversationId) {
         setConversationId(null)
@@ -159,6 +179,8 @@ export function WorkbenchView() {
     // 终态 refreshList 再以后端为准对齐（手动改过名的后端不覆盖，刷新会还原）。
     if (messages.length === 0) {
       const title = question.split(/\s+/).join(' ').slice(0, 20)
+      listRequestGeneration.current += 1
+      setConvLoading(false)
       setConversations((prev) =>
         prev.map((c) =>
           c.conversationId === conversationId && c.title === '新会话' ? { ...c, title } : c,

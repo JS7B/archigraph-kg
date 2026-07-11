@@ -811,3 +811,32 @@
 - 踩了什么坑：无（build 绿）。像素级观感（暗面色深浅、光晕位置/强度、家具高光是否过亮）
   需在浏览器/StyleGallery 里肉眼逐项微调——本次给出的是成体系的可执行底座与语义 token，
   精细数值留人工按真实渲染收敛（评审已约定视觉验收由人肉眼过）。
+
+
+## 2026-07-11 前端质量门禁、事件回调与图谱延迟加载
+
+- 做了什么：引入 Vitest、Testing Library 与 jsdom，补齐 `lint`、`test`、`test:run`
+  命令和 7 个关键测试；修复 6 个 React Hooks lint 错误；把 Run 成功/失败处理移到
+  SSE 终态回调；将 GraphView/Cytoscape 改为首次进入图谱时才加载，加载后继续挂载以
+  保留搜索、筛选和选中状态。
+
+- 这是什么：Vitest 是与 Vite 共用转换链的单元测试运行器，Testing Library 从用户可见
+  的按钮、文本与可访问角色验证组件，jsdom 在 Node 中提供轻量浏览器 DOM。终态回调是
+  SSE 收到 `succeeded`/`failed` 时直接通知业务层，而不是等组件观察事件数组后再改状态。
+  动态导入会把 GraphView 及 Cytoscape 生成独立异步 chunk，浏览器只在真正需要时下载。
+
+- 为什么需要：没有可执行测试时，会话保留、终态去重、上传/删除 busy 解除等状态流只能
+  靠手测，容易回归；在 effect 中同步触发 setState 会形成额外渲染链，并被 React 19 的
+  hooks lint 明确拦截。Cytoscape 体积较大，首屏直接导入会让不看图谱的用户也承担下载与
+  解析成本。
+
+- 为什么这么做：保留 RunEvent 为唯一事实来源，在 `useRunEvents` 的订阅边界去重终态，
+  用 React 19 `useEffectEvent` 读取最新业务回调，既不重订阅，也不在渲染期写 ref；四个
+  视图的初始请求只在 Promise 完成回调中更新状态，并用 cancelled 标记屏蔽卸载后的迟到
+  结果。GraphView 用 `React.lazy` + `Suspense` 延迟加载，首次激活后只用 `hidden` 切换，
+  从而兼顾拆包和组件状态保留。lint 规则保持开启，Vite 的 500 KB 警告阈值也未提高。
+
+- 踩了什么坑：npm 11.9.0 没有把计划中的 `npm run test:run -- --passWithNoTests` 参数
+  转交给 Vitest，因此无测试阶段改用等价的 `npx vitest run --passWithNoTests` 验证工具链；
+  测试落地后正常使用 `npm run test:run`。生产构建入口 chunk 为 384.61 kB，已低于
+  500 kB；独立 GraphView chunk 为 568.55 kB，Vite 仍如实告警，没有调高阈值隐藏事实。

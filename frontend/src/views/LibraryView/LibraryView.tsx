@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch, ApiError, BASE_URL } from '../../api/client'
 import { Button, Card, Chip, DataValue, Eyebrow, StatusBadge } from '../../components/ui'
 import { useRunEvents } from '../../hooks/useRunEvents'
-import type { DocumentMeta, DocumentSourceType, IndexStatus, ParseStatus, Stage } from '../../types'
+import type { DocumentMeta, DocumentSourceType, IndexStatus, ParseStatus, RunEvent, Stage } from '../../types'
 import styles from './LibraryView.module.css'
 
 const sourceTypeLabels: Record<DocumentSourceType, string> = {
@@ -79,38 +79,54 @@ export function LibraryView() {
   // 待确认删除的文档 id（非空时弹出确认框）
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const { events, currentStage } = useRunEvents(activeRunId)
+  const listRequestGeneration = useRef(0)
   const isBusy = activeRunId !== null
 
   const refresh = useCallback(async () => {
+    const generation = ++listRequestGeneration.current
     try {
       const list = await apiFetch<DocumentMeta[]>('/api/documents')
+      if (generation !== listRequestGeneration.current) return
       setDocuments(list)
       setLoadError(null)
     } catch (err) {
+      if (generation !== listRequestGeneration.current) return
       const msg = err instanceof ApiError ? err.message : '请求失败，请确认后端已启动'
       setLoadError(msg)
     }
   }, [])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    const generation = ++listRequestGeneration.current
+    apiFetch<DocumentMeta[]>('/api/documents')
+      .then((list) => {
+        if (generation !== listRequestGeneration.current) return
+        setDocuments(list)
+        setLoadError(null)
+      })
+      .catch((err: unknown) => {
+        if (generation !== listRequestGeneration.current) return
+        const msg = err instanceof ApiError ? err.message : '请求失败，请确认后端已启动'
+        setLoadError(msg)
+      })
+    return () => {
+      if (generation === listRequestGeneration.current) listRequestGeneration.current += 1
+    }
+  }, [])
 
   // 终态到达：刷新文档列表并结束 Run 订阅。
-  useEffect(() => {
-    if (!activeRunId) return
-    const last = events[events.length - 1]
-    if (!last) return
-    if (last.status === 'succeeded') {
+  const handleTerminal = useCallback((event: RunEvent) => {
+    if (event.status === 'succeeded') {
       setActiveRunId(null)
       setRunError(null)
       void refresh()
-    } else if (last.status === 'failed') {
+    } else if (event.status === 'failed') {
       setActiveRunId(null)
-      setRunError(last.message || '操作失败')
+      setRunError(event.message || '操作失败')
     }
-  }, [events, activeRunId, refresh])
+  }, [refresh])
+
+  const { events, currentStage } = useRunEvents(activeRunId, { onTerminal: handleTerminal })
 
   async function handleUpload(file: File) {
     // multipart 上传：必须用原生 fetch，apiFetch 会强制 JSON content-type。

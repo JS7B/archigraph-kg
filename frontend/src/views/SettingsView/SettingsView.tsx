@@ -56,8 +56,25 @@ export function SettingsView() {
   }, [])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    let cancelled = false
+    fetchHealthDeps()
+      .then((data) => {
+        if (cancelled) return
+        setHealth(data)
+        setLoadError(null)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        const msg = err instanceof ApiError ? err.message : '请求失败，请确认后端已启动'
+        setLoadError(msg)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const neo4j = health ? parseNeo4j(health.neo4j) : null
   const llm = health ? parseLlm(health.llm) : null

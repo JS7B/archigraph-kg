@@ -197,8 +197,25 @@ export function GraphView() {
   }, [])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    let cancelled = false
+    fetchGraph()
+      .then((data) => {
+        if (cancelled) return
+        setGraphData(data)
+        setLoadError(null)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        const msg = err instanceof ApiError ? err.message : '请求失败，请确认后端已启动'
+        setLoadError(msg)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Cytoscape elements 由 graphData 派生：附度数分档 class；隐藏孤立时滤掉度数 0 的点
   // 及其悬挂边（两端都需可见）。
