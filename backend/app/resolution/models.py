@@ -163,6 +163,20 @@ class ResolutionCandidate(BaseModel):
                 raise ValueError("accepted resolution requires canonical_id")
             if self.evidence is None:
                 raise ValueError("accepted resolution requires evidence")
+            if (
+                self.evidence.source_entity_id != self.source_entity_id
+                or self.evidence.source_document_id != self.source_document_id
+                or self.evidence.source_chunk_id != self.source_chunk_id
+                or self.evidence.canonical_id != self.canonical_id
+            ):
+                raise ValueError(
+                    "accepted evidence must match candidate provenance and canonical_id"
+                )
+        elif self.status is ResolutionStatus.UNRESOLVED:
+            if self.canonical_id is not None or self.evidence is not None:
+                raise ValueError(
+                    "unresolved resolution must not carry canonical_id or evidence"
+                )
         return self
 
     @property

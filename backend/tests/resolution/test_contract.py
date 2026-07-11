@@ -65,6 +65,54 @@ def test_accepted_candidate_requires_evidence():
         )
 
 
+def test_accepted_evidence_must_match_candidate_provenance_and_target():
+    with pytest.raises(ValidationError):
+        ResolutionCandidate(
+            source_entity_id="doc-1::fastapi",
+            source_name="FastAPI",
+            source_document_id="doc-1",
+            source_chunk_id="chunk-1",
+            canonical_id="canonical:fastapi",
+            status=ResolutionStatus.ACCEPTED,
+            method=ResolutionMethod.EXACT,
+            score=1.0,
+            evidence=_evidence(source_chunk_id="chunk-2"),
+        )
+
+    with pytest.raises(ValidationError):
+        ResolutionCandidate(
+            source_entity_id="doc-1::fastapi",
+            source_name="FastAPI",
+            source_document_id="doc-1",
+            source_chunk_id="chunk-1",
+            canonical_id="canonical:fastapi",
+            status=ResolutionStatus.ACCEPTED,
+            method=ResolutionMethod.EXACT,
+            score=1.0,
+            evidence=_evidence(canonical_id="canonical:other"),
+        )
+
+
+def test_unresolved_candidate_cannot_carry_target_or_evidence():
+    with pytest.raises(ValidationError):
+        ResolutionCandidate(
+            source_entity_id="doc-1::unknown",
+            source_name="Unknown",
+            source_document_id="doc-1",
+            source_chunk_id="chunk-9",
+            canonical_id="canonical:unknown",
+        )
+
+    with pytest.raises(ValidationError):
+        ResolutionCandidate(
+            source_entity_id="doc-1::unknown",
+            source_name="Unknown",
+            source_document_id="doc-1",
+            source_chunk_id="chunk-9",
+            evidence=_evidence(canonical_id="canonical:unknown"),
+        )
+
+
 def test_contract_models_serialize_provenance_and_enums():
     canonical = CanonicalEntityReference(
         canonical_id="canonical:fastapi",
