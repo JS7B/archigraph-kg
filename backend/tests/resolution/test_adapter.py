@@ -37,6 +37,7 @@ def test_adapter_groups_accepted_entities_and_retains_all_mention_evidence():
     group = result.groups[0]
     assert group.canonical_id == "tech:fastapi"
     assert group.source_entity_ids == ["doc-1::fastapi", "doc-2::fast-api"]
+    assert group.source_document_ids == ["doc-1", "doc-2"]
     assert group.mention_chunk_ids == ["chunk-1", "chunk-2", "chunk-9"]
     assert [e.source_chunk_id for e in group.evidence] == ["chunk-1", "chunk-2", "chunk-9"]
 
@@ -93,3 +94,18 @@ def test_missing_mentions_never_create_synthetic_accepted_evidence():
     assert result.candidates[0].status is ResolutionStatus.UNRESOLVED
     assert result.candidates[0].evidence is None
     assert result.groups[0].canonical_id == "doc-1::fastapi"
+
+
+def test_alias_group_keeps_source_document_ids_in_input_order():
+    resolver = DeterministicResolver(
+        [CanonicalEntityReference(canonical_id="tech:fastapi", canonical_name="FastAPI")],
+        aliases={"Fast API": "tech:fastapi"},
+    )
+    result = ResolutionAdapter(resolver).adapt(
+        [
+            _entity("first::fastapi", "FastAPI", "chunk-1"),
+            _entity("second::fast-api", "Fast API", "chunk-2"),
+        ]
+    )
+
+    assert result.groups[0].source_document_ids == ["first", "second"]

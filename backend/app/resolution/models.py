@@ -214,6 +214,7 @@ class ResolutionGroup(BaseModel):
     canonical_name: str
     entity_type: str = ""
     source_entity_ids: list[str] = Field(default_factory=list)
+    source_document_ids: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
     mention_chunk_ids: list[str] = Field(default_factory=list)
     evidence: list[ResolutionEvidence] = Field(default_factory=list)

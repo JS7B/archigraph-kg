@@ -82,10 +82,12 @@ class ResolutionAdapter:
                     canonical_name=canonical_name,
                     entity_type=entity.type,
                     source_entity_ids=[entity_id],
+                    source_document_ids=[document_id],
                     fallback=fallback,
                 )
                 groups[target_id] = group
             self._append_unique(group.source_entity_ids, entity_id)
+            self._append_unique(group.source_document_ids, document_id)
             self._append_unique(group.aliases, entity.name)
             for chunk_id in mentions:
                 self._append_unique(group.mention_chunk_ids, chunk_id)
