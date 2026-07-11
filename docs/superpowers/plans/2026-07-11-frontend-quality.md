@@ -285,4 +285,3 @@ git status --short
 ```
 
 Expected: clean worktree. Report commits, test counts, and build chunk sizes to the main agent.
-

@@ -158,4 +158,3 @@ git status --short
 ```
 
 Expected: clean worktree. Report commits, audit test count, and manual audit output to the main agent.
-
