@@ -59,6 +59,29 @@ ORDER BY e.name
 LIMIT $limit
 """
 
+# Fetch one bounded, deterministic entity/relationship snapshot.  Connected
+# components are calculated in Python so the response remains stable across
+# Neo4j versions and does not require a graph data-science plugin.
+_COMMUNITIES = """
+MATCH (e:Entity)
+WHERE $document_id IS NULL OR e.document_id = $document_id
+WITH e
+ORDER BY e.entity_id
+LIMIT $node_limit
+WITH collect(e) AS nodes
+UNWIND nodes AS source
+OPTIONAL MATCH (source)-[r:RELATES]-(target:Entity)
+WHERE target IN nodes
+RETURN [n IN nodes | {
+  entity_id: n.entity_id, name: n.name,
+  entity_type: n.entity_type, document_id: n.document_id
+}] AS nodes,
+       collect(DISTINCT CASE WHEN r IS NULL THEN NULL ELSE {
+         source: startNode(r).entity_id, target: endNode(r).entity_id,
+         type: r.type, confidence: r.confidence
+       } END) AS edges
+"""
+
 # The fixed upper bound keeps the variable-length traversal bounded even when
 # a caller supplies the largest accepted depth.  ``$depth`` still lets the
 # endpoint select a smaller radius without interpolating user input into Cypher.
@@ -294,3 +317,122 @@ async def search_entities(
         _SEARCH, q=q, limit=limit, database_="neo4j"
     )
     return [_node(r.data()) for r in records]
+
+
+def _community_summaries(rows: list, node_limit: int | None = None) -> list[dict]:
+    """Build stable connected-component summaries from a bounded snapshot."""
+    node_by_id: dict[str, dict] = {}
+    raw_edges: list[dict] = []
+    for raw_row in rows:
+        row = raw_row.data() if hasattr(raw_row, "data") else raw_row
+        for raw_node in row.get("nodes", []) or []:
+            if not raw_node or not raw_node.get("entity_id"):
+                continue
+            entity_id = raw_node["entity_id"]
+            node_by_id.setdefault(
+                entity_id,
+                {
+                    "id": entity_id,
+                    "name": raw_node.get("name") or "",
+                    "type": raw_node.get("entity_type") or "",
+                    "documentId": raw_node.get("document_id") or "",
+                },
+            )
+        raw_edges.extend(
+            edge for edge in (row.get("edges", []) or []) if edge
+        )
+
+    if not node_by_id:
+        return []
+
+    # Neo4j enforces this bound in the normal path.  Keep the same guarantee
+    # for fake drivers and future query revisions that may return a probe row.
+    if node_limit is not None:
+        node_by_id = dict(sorted(node_by_id.items())[:node_limit])
+
+    parent = {entity_id: entity_id for entity_id in node_by_id}
+
+    def find(entity_id: str) -> str:
+        while parent[entity_id] != entity_id:
+            parent[entity_id] = parent[parent[entity_id]]
+            entity_id = parent[entity_id]
+        return entity_id
+
+    def union(left: str, right: str) -> None:
+        left_root, right_root = find(left), find(right)
+        if left_root == right_root:
+            return
+        if left_root < right_root:
+            parent[right_root] = left_root
+        else:
+            parent[left_root] = right_root
+
+    edges: list[dict] = []
+    seen_edges: set[tuple] = set()
+    for edge in raw_edges:
+        source, target = edge.get("source"), edge.get("target")
+        if source not in node_by_id or target not in node_by_id:
+            continue
+        edge_key = (
+            min(source, target),
+            max(source, target),
+            edge.get("type") or "",
+            edge.get("confidence"),
+        )
+        if edge_key in seen_edges:
+            continue
+        seen_edges.add(edge_key)
+        edges.append(edge)
+        union(source, target)
+
+    components: dict[str, set[str]] = {}
+    for entity_id in sorted(node_by_id):
+        components.setdefault(find(entity_id), set()).add(entity_id)
+
+    summaries: list[dict] = []
+    for component in components.values():
+        component_ids = sorted(component)
+        representative_id = component_ids[0]
+        component_edges = [
+            edge
+            for edge in edges
+            if edge.get("source") in component and edge.get("target") in component
+        ]
+        document_ids = sorted(
+            {
+                node_by_id[entity_id]["documentId"]
+                for entity_id in component_ids
+                if node_by_id[entity_id]["documentId"]
+            }
+        )
+        summaries.append(
+            {
+                "id": f"community-{representative_id}",
+                "representativeNode": node_by_id[representative_id],
+                "nodeCount": len(component_ids),
+                "edgeCount": len(component_edges),
+                "documentIds": document_ids,
+            }
+        )
+
+    summaries.sort(key=lambda summary: summary["id"])
+    return summaries
+
+
+@router.get("/communities")
+async def list_communities(
+    request: Request,
+    limit: int = Query(20, ge=1, le=100),
+    node_limit: int = Query(200, alias="nodeLimit", ge=1, le=500),
+    document_id: str | None = Query(None, alias="documentId"),
+) -> list[dict]:
+    """Return deterministic, bounded connected-component summaries."""
+    driver = request.app.state.neo4j
+    records, _, _ = driver.execute_query(
+        _COMMUNITIES,
+        limit=limit,
+        node_limit=node_limit,
+        document_id=document_id,
+        database_="neo4j",
+    )
+    return _community_summaries(records, node_limit=node_limit)[:limit]
