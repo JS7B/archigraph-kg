@@ -233,6 +233,7 @@ def test_audit_repository_runs_audit_tests_from_repo_root(tmp_path):
                 "pytest",
                 "backend/tests/audit",
                 "-q",
+                "--confcutdir=backend/tests/audit",
             ],
             repo,
         )

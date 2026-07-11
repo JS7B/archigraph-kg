@@ -25,7 +25,14 @@ EVAL_COMMANDS = [
     [sys.executable, "-m", "pytest", "evals/tests", "-q"],
 ]
 AUDIT_COMMANDS = [
-    [sys.executable, "-m", "pytest", "backend/tests/audit", "-q"],
+    [
+        sys.executable,
+        "-m",
+        "pytest",
+        "backend/tests/audit",
+        "-q",
+        "--confcutdir=backend/tests/audit",
+    ],
 ]
 PYTHON_PARSING_COMMAND = [
     sys.executable,
