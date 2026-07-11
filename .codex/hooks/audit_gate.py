@@ -81,7 +81,7 @@ BRANCH_SCOPES = {
         "backend/tests/routers/test_graph.py",
         "backend/DEVLOG.md",
     ),
-    "feat/kg-graph-experience": (
+    "feat/graph-experience": (
         "frontend/",
         "frontend/DEVLOG.md",
     ),

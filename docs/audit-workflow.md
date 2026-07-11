@@ -60,7 +60,7 @@ The audit gate keeps each quality worktree on its declared paths:
 - `feat/kg-extraction`: `backend/app/extraction/`, `backend/tests/extraction/`, and `backend/DEVLOG.md`.
 - `feat/kg-resolution`: `backend/app/resolution/`, `backend/tests/resolution/`, and `backend/DEVLOG.md`.
 - `feat/kg-community-api`: graph modules, the graph router and its tests, plus `backend/DEVLOG.md`.
-- `feat/kg-graph-experience`: `frontend/` and `frontend/DEVLOG.md`.
+- `feat/graph-experience`: `frontend/` and `frontend/DEVLOG.md`.
 
 Backend changes also select the smallest relevant pytest gate. Parsing runs
 `backend/tests/parsing`; extraction runs `backend/tests/extraction`; graph or

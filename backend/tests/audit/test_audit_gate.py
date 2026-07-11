@@ -134,7 +134,7 @@ def test_new_quality_worktree_scopes_block_paths_outside_their_ownership(tmp_pat
             "backend/app/parsing/models.py",
         ),
         (
-            "feat/kg-graph-experience",
+            "feat/graph-experience",
             "frontend/src/views/GraphView/GraphView.tsx",
             "backend/app/routers/graph.py",
         ),
