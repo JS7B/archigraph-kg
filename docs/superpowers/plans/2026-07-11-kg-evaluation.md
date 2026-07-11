@@ -19,6 +19,7 @@
 
 **Files:**
 - Create: `evals/quality_fixtures.jsonl`
+- Create: `evals/quality_fixtures.py`
 - Test: `evals/tests/test_quality_fixtures.py`
 
 **Interfaces:**
