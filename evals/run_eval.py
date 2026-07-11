@@ -25,7 +25,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "backend"))
 
-from evals.metrics import split_assertion_sentences, summarize_entity_recall  # noqa: E402
+from evals.metrics import (  # noqa: E402
+    count_entity_recall_sample,
+    split_assertion_sentences,
+    summarize_entity_recall,
+)
 
 from app.clients.graph import close, get_driver, verify_connectivity  # noqa: E402
 from app.config import get_settings  # noqa: E402
@@ -208,12 +212,22 @@ def main():
         for gt in gold_truth:
             sample_name = gt["document_id"]
             print(f"\n=== {sample_name} ({gt['doc_type']}) ===")
+            gold_names = [entity["name"] for entity in gt["entities"]]
+            _, gold_count = count_entity_recall_sample(gold_names, None)
 
             doc, parse_info = eval_parse(sample_name)
             if doc is None:
                 all_parse_ok = False
+                entity_hit_counts.append(0)
+                entity_gold_counts.append(gold_count)
                 print(f"  解析失败: {parse_info.get('error')}")
-                results.append({"sample": sample_name, "parse": parse_info})
+                results.append({
+                    "sample": sample_name,
+                    "doc_type": gt["doc_type"],
+                    "parse": parse_info,
+                    "entity_hit_count": 0,
+                    "gold_total": gold_count,
+                })
                 continue
             print(f"  解析成功: {parse_info['chunks']} chunks, 偏移完整性={'OK' if not parse_info['offset_broken'] else 'BROKEN'}")
 
@@ -227,8 +241,7 @@ def main():
             recall, missed = _entity_recall(entities, gt["entities"])
             unmatched = _unmatched_extracted(entities, gt["entities"])
             usable = _relation_usable(relations, ext_detail["raw_relations"])
-            gold_count = len({_norm(g["name"]) for g in gt["entities"]})
-            hit_count = gold_count - len({_norm(name) for name in missed})
+            hit_count, gold_count = count_entity_recall_sample(gold_names, missed)
             entity_gold_counts.append(gold_count)
             entity_hit_counts.append(hit_count)
             total_raw_relations += ext_detail["raw_relations"]

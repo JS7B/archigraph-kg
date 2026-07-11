@@ -8,10 +8,11 @@ _PROTECTED_DOT = "\ue000"
 _PROTECTED_QUESTION = "\ue001"
 _PROTECTED_EXCLAMATION = "\ue002"
 _DOTTED_TOKEN_RE = re.compile(r"(?<=\w)\.(?=\w)")
-_URL_RE = re.compile(r"https?://\S+")
+_URL_RE = re.compile(r"https?://\S+?(?=\[\d+\]|\s|$)")
 _LIST_PREFIX_RE = re.compile(r"^\s*(?:[-+*]|\d+[.)])\s+")
-_PURE_FORMAT_RE = re.compile(r"[\s#>*_~`-]+")
-_SENTENCE_END_RE = re.compile(r"[。.！!？?.](?:\s*\[\d+\])*")
+_CITATION_RE = re.compile(r"\[\d+\]")
+_PURE_FORMAT_RE = re.compile(r"[\s#>*_~`\-。.！!？?]+")
+_SENTENCE_END_RE = re.compile(r"[。.！!？?.]+(?:\s*\[\d+\])*")
 
 
 def _protect_url_punctuation(match: re.Match[str]) -> str:
@@ -59,10 +60,25 @@ def split_assertion_sentences(text: str) -> list[str]:
 
         for fragment in fragments:
             sentence = _restore_protected_punctuation(fragment).strip()
-            if sentence and not _PURE_FORMAT_RE.fullmatch(sentence):
+            assertion_text = _CITATION_RE.sub("", sentence).strip()
+            if assertion_text and not _PURE_FORMAT_RE.fullmatch(assertion_text):
                 sentences.append(sentence)
 
     return sentences
+
+
+def count_entity_recall_sample(
+    gold_names: list[str], missed_names: list[str] | None
+) -> tuple[int, int]:
+    """Return exact hits and unique gold count; ``None`` means evaluation failed."""
+    gold_normalized = {name.lower().strip() for name in gold_names}
+    gold_count = len(gold_normalized)
+    if missed_names is None:
+        return 0, gold_count
+
+    missed_normalized = {name.lower().strip() for name in missed_names}
+    hit_count = gold_count - len(gold_normalized & missed_normalized)
+    return hit_count, gold_count
 
 
 def summarize_entity_recall(
