@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Button } from './components/ui'
 import { TopBar, type ViewKey } from './components/TopBar/TopBar'
 import { WorkbenchView } from './views/WorkbenchView/WorkbenchView'
 import { LibraryView } from './views/LibraryView/LibraryView'
-import { GraphView } from './views/GraphView/GraphView'
 import { SettingsView } from './views/SettingsView/SettingsView'
 import { StyleGallery } from './views/StyleGallery/StyleGallery'
 import styles from './App.module.css'
+
+const LazyGraphView = lazy(() =>
+  import('./views/GraphView/GraphView').then((module) => ({ default: module.GraphView })),
+)
 
 // 设计系统预览：仅开发模式 + URL 带 ?preview 时挂载，不影响生产路由。
 const showGallery =
@@ -16,6 +19,7 @@ const showGallery =
 
 export default function App() {
   const [view, setView] = useState<ViewKey>('workbench')
+  const [graphActivated, setGraphActivated] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   // F6 焦点管理：打开时记下触发按钮，移焦到关闭按钮；关闭时还焦回去。
   const triggerRef = useRef<HTMLElement | null>(null)
@@ -39,7 +43,10 @@ export default function App() {
     <div className={styles.app}>
       <TopBar
         active={view}
-        onChange={setView}
+        onChange={(nextView) => {
+          if (nextView === 'graph') setGraphActivated(true)
+          setView(nextView)
+        }}
         onToggleSettings={() => setSettingsOpen((v) => !v)}
       />
       <main className={styles.main}>
@@ -47,7 +54,13 @@ export default function App() {
             组件不卸载，WorkbenchView 的会话/消息等 state 天然保留（切走再回来不丢）。 */}
         <div className={styles.viewPane} hidden={view !== 'workbench'}><WorkbenchView /></div>
         <div className={styles.viewPane} hidden={view !== 'library'}><LibraryView /></div>
-        <div className={styles.viewPane} hidden={view !== 'graph'}><GraphView /></div>
+        {graphActivated && (
+          <Suspense
+            fallback={<div className={styles.viewPane} role="status">正在加载图谱视图…</div>}
+          >
+            <div className={styles.viewPane} hidden={view !== 'graph'}><LazyGraphView /></div>
+          </Suspense>
+        )}
       </main>
       {settingsOpen && (
         <div
