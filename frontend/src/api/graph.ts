@@ -25,6 +25,7 @@ interface RawNode {
   name: string
   type: string
   documentId: string
+  communityId?: string | null
   degree?: number // 后端 B4 提供；未就绪时字段缺失，前端 edges 兜底
   mentionCount?: number // 后端 B4 提供
 }
@@ -46,6 +47,7 @@ function mapNode(n: RawNode): GraphNode {
     label: n.name,
     entityType: n.type,
     ...(typeof n.documentId === 'string' ? { documentId: n.documentId } : {}),
+    ...(n.communityId !== undefined ? { communityId: n.communityId } : {}),
     // 后端字段可能未就绪：仅在存在时透传，缺省交给 View 层 edges 兜底
     ...(typeof n.degree === 'number' ? { degree: n.degree } : {}),
     ...(typeof n.mentionCount === 'number' ? { mentionCount: n.mentionCount } : {}),

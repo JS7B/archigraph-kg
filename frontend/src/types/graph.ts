@@ -1,17 +1,18 @@
 export interface GraphNode {
   id: string
   label: string
-  entityType: string // 实体类型（人物/机构/技术概念等，开发期收敛）
-  documentId?: string
-  degree?: number // 图内度数（后端 B4 提供；缺省时前端用 edges 本地计数兜底）
-  mentionCount?: number // 提及次数（后端 B4 提供，用于展示层排序/分级参考）
+  entityType: string // entity type (person, organization, concept, etc.)
+  documentId?: string // source document identifier
+  communityId?: string | null
+  degree?: number // graph degree
+  mentionCount?: number // mention count used for ranking
 }
 
 export interface GraphEdge {
   id: string
-  source: string // 源节点 id
-  target: string // 目标节点 id
-  relationType: string // 业务关系类型（先统一 :RELATES，类型作属性）
+  source: string // source node id
+  target: string // target node id
+  relationType: string // business relation type
   confidence?: number | null
   evidenceChunkId?: string | null
 }
