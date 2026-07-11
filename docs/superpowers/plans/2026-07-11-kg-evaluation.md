@@ -106,4 +106,3 @@ Each pair returns `(pooled, macro)`; mismatched lengths raise `ValueError`; empt
 - [ ] Run `D:\Anaconda\envs\myself\python.exe -m pytest evals/tests -q` and `D:\Anaconda\envs\myself\python.exe -m py_compile evals/quality_fixtures.py evals/quality_metrics.py`.
 - [ ] Run `git diff --check` and confirm `git status --short` is empty.
 - [ ] Report changed files, test count, and interfaces consumed by `feat/kg-parsing`.
-

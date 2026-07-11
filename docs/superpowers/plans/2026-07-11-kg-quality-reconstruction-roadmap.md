@@ -40,4 +40,3 @@
 ## Deferred plan creation
 
 Detailed plans for parsing, extraction, resolution, community API, and frontend are created immediately before their corresponding worktree, after the previous contract is merged. This prevents speculative file interfaces from drifting while preserving the fixed sequence above.
-
