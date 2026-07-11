@@ -14,7 +14,8 @@ SYSTEM_PROMPT = (
     "你是知识图谱抽取助手。从给定文本片段中识别实体与它们之间的关系，"
     "只输出一个 JSON 对象，不要 markdown、不要解释。\n"
     "JSON 形如 {\"entities\": [...], \"relations\": [...]}。\n"
-    "entity 字段：name（实体名）、type（类型）、description（依据本片段的一句话描述）。\n"
+    "entity 字段：name（实体名）、type（类型）、description（依据本片段的一句话描述）、"
+    "evidence（证据对象，包含 chunk_id 与 text）。\n"
     f"type 只能取以下封闭集合之一：{ENTITY_TYPES}。不属于任何一类的，不要抽取，"
     "严禁自拟新类型。\n"
     "不要抽取以下内容（它们不是实体）：代词（它/这/该系统等）、章节标题、"
@@ -26,12 +27,17 @@ SYSTEM_PROMPT = (
     "Vite、TypeScript 五个实体，而不是一个笼统的「技术栈」）。\n"
     "英文术语保留原始拼写与大小写（写 Neo4j 不写 neo4j，写 TypeScript 不写 typescript）。\n"
     "relation 字段：source、target（都必须精确等于本次 entities 中某个 name）、"
-    "type（优先从 依赖/组成/使用/导致/缓解/属于/对比/影响/约束 中选）、confidence（0~1 的把握度）。\n"
+    "type（优先从 依赖/组成/使用/导致/缓解/属于/对比/影响/约束 中选）、confidence（0~1 的把握度）、"
+    "evidence（证据对象，包含 chunk_id 与 text）。每个 entity/relation 都必须提供 evidence，"
+    "不得省略或编造证据。\n"
     "片段中没有可抽取内容时，返回空数组。\n"
     "示例——文本「本系统基于 Python 与 FastAPI 构建，用它做后端服务」应抽取："
-    "{\"entities\": [{\"name\": \"Python\", \"type\": \"技术\", \"description\": \"构建本系统的编程语言\"}, "
-    "{\"name\": \"FastAPI\", \"type\": \"技术\", \"description\": \"后端服务框架\"}], "
-    "\"relations\": [{\"source\": \"FastAPI\", \"target\": \"Python\", \"type\": \"依赖\", \"confidence\": 0.8}]}——"
+    "{\"entities\": [{\"name\": \"Python\", \"type\": \"技术\", \"description\": \"构建本系统的编程语言\", "
+    "\"evidence\": {\"chunk_id\": \"当前 chunk_id\", \"text\": \"基于 Python 构建\"}}, "
+    "{\"name\": \"FastAPI\", \"type\": \"技术\", \"description\": \"后端服务框架\", "
+    "\"evidence\": {\"chunk_id\": \"当前 chunk_id\", \"text\": \"使用 FastAPI\"}}], "
+    "\"relations\": [{\"source\": \"FastAPI\", \"target\": \"Python\", \"type\": \"依赖\", \"confidence\": 0.8, "
+    "\"evidence\": {\"chunk_id\": \"当前 chunk_id\", \"text\": \"FastAPI 依赖 Python\"}}]}——"
     "注意「本系统」「后端服务」「它」是泛化名词/代词，不抽取。"
 )
 
@@ -41,6 +47,7 @@ def build_messages(
     *,
     extraction_policy: ExtractionPolicy | str = ExtractionPolicy.NORMAL,
     language: str | None = None,
+    chunk_id: str | None = None,
 ) -> list[dict]:
     """构造单个 chunk 的抽取消息（system + user）。"""
     try:
@@ -55,12 +62,19 @@ def build_messages(
             "syntax, paths, log lines, punctuation, symbols, and variable names as entities."
         )
     language_hint = f"\nDetected language: {language}" if language else ""
+    evidence_hint = (
+        f'当前 chunk_id 为 "{chunk_id}"，每个 evidence.chunk_id 必须精确使用该值。'
+        if chunk_id
+        else "每个 evidence.chunk_id 必须使用当前输入 chunk 的真实标识。"
+    )
     user = (
         "请从下面的文本片段抽取实体与关系，并以 JSON 对象返回，"
-        '形如 {"entities": [{"name":"...","type":"...","description":"..."}], '
-        '"relations": [{"source":"...","target":"...","type":"...","confidence":0.8}]}。\n'
+        '形如 {"entities": [{"name":"...","type":"...","description":"...",'
+        '"evidence":{"chunk_id":"...","text":"..."}}], '
+        '"relations": [{"source":"...","target":"...","type":"...",'
+        '"confidence":0.8,"evidence":{"chunk_id":"...","text":"..."}}]}。\n'
         "relations 的 source/target 必须是 entities 中出现过的 name。\n\n"
-        f"文本片段：\n{chunk_text}{language_hint}"
+        f"{evidence_hint}\n文本片段：\n{chunk_text}{language_hint}"
     )
     return [
         {"role": "system", "content": system},

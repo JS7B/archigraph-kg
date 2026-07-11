@@ -42,7 +42,10 @@ def extract_chunk(
 ) -> ChunkExtractionResult:
     """抽取单个 chunk 的实体与关系；失败按指数退避重试，耗尽抛 ExtractionError。"""
     messages = build_messages(
-        chunk_text, extraction_policy=extraction_policy, language=language
+        chunk_text,
+        extraction_policy=extraction_policy,
+        language=language,
+        chunk_id=chunk_id,
     )
     last_reason = ""
     for attempt in range(1, max_attempts + 1):

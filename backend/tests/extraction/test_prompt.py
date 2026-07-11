@@ -33,3 +33,12 @@ def test_specialized_prompt_carries_language_and_restricts_entities():
     assert "python" in combined
     assert "库" in combined or "framework" in combined.lower()
     assert "generic" in combined.lower() or "通用" in combined
+
+
+def test_prompt_requires_evidence_with_current_chunk_id():
+    msgs = build_messages("FastAPI 依赖 Pydantic", chunk_id="d#7")
+    combined = msgs[0]["content"] + msgs[1]["content"]
+
+    assert "evidence" in combined.lower()
+    assert "chunk_id" in combined
+    assert "d#7" in combined
