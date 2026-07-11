@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { ApiError } from '../../api/client'
 import { fetchCommunities, fetchGraph, fetchSubgraph } from '../../api/graph'
 import { GraphView } from './GraphView'
 import { edgeConfidenceClass, nodeVisualClasses } from './graphVisuals'
@@ -43,6 +44,8 @@ beforeEach(() => {
   mockedFetchSubgraph.mockReset()
 })
 
+afterEach(cleanup)
+
 it('starts with the first bounded community and local subgraph', async () => {
   mockedFetchCommunities.mockResolvedValue([
     {
@@ -70,6 +73,42 @@ it('starts with the first bounded community and local subgraph', async () => {
   expect(mockedFetchGraph).not.toHaveBeenCalled()
 })
 
+it('shows the community overview and loads the selected community subgraph', async () => {
+  mockedFetchCommunities.mockResolvedValue([
+    {
+      id: 'community-ent-a',
+      representativeNode: { id: 'ent-a', label: 'Alpha', entityType: 'Concept' },
+      nodeCount: 3,
+      edgeCount: 2,
+      documentIds: ['doc-a'],
+    },
+    {
+      id: 'community-ent-b',
+      representativeNode: { id: 'ent-b', label: 'Beta', entityType: 'Library' },
+      nodeCount: 2,
+      edgeCount: 1,
+      documentIds: ['doc-b'],
+    },
+  ])
+  mockedFetchSubgraph.mockImplementation(async (nodeId) => ({
+    centerId: nodeId,
+    metadata: { depth: 1, limit: 50, nodeCount: 1, edgeCount: 0, truncated: false },
+    nodes: [{ id: nodeId, label: nodeId === 'ent-a' ? 'Alpha' : 'Beta', entityType: 'Concept' }],
+    edges: [],
+  }))
+
+  render(<GraphView />)
+
+  const betaCommunity = await screen.findByRole('button', { name: /Beta/ })
+  expect(screen.getAllByRole('button', { name: /Alpha/ }).length).toBeGreaterThan(0)
+  expect(betaCommunity).toHaveAttribute('aria-pressed', 'false')
+
+  fireEvent.click(betaCommunity)
+
+  await waitFor(() => expect(mockedFetchSubgraph).toHaveBeenLastCalledWith('ent-b'))
+  expect(betaCommunity).toHaveAttribute('aria-pressed', 'true')
+})
+
 it('falls back to the existing entities endpoint when community loading fails', async () => {
   mockedFetchCommunities.mockRejectedValue(new Error('communities unavailable'))
   mockedFetchGraph.mockResolvedValue({ nodes: [], edges: [] })
@@ -78,6 +117,17 @@ it('falls back to the existing entities endpoint when community loading fails', 
 
   await waitFor(() => expect(mockedFetchGraph).toHaveBeenCalled())
   expect(screen.getByRole('status', { name: 'graph-empty' })).toBeInTheDocument()
+})
+
+it('shows an explicit error and no fabricated entities when both graph requests fail', async () => {
+  mockedFetchCommunities.mockRejectedValue(new Error('communities unavailable'))
+  mockedFetchGraph.mockRejectedValue(new ApiError('upstream', 'graph service unavailable'))
+
+  render(<GraphView />)
+
+  const error = await screen.findByRole('status', { name: 'graph-error' })
+  expect(error).toHaveTextContent('加载失败：graph service unavailable')
+  expect(screen.queryByText('Alpha')).not.toBeInTheDocument()
 })
 
 it('assigns stable visual classes for entity type, community, and edge confidence', () => {
@@ -137,6 +187,25 @@ it('shows relation provenance and explicitly labels missing evidence', async () 
   expect(await screen.findByText('Missing evidence')).toBeInTheDocument()
   expect(screen.getByText('doc-a')).toBeInTheDocument()
   expect(screen.getByText('0.42')).toBeInTheDocument()
+})
+
+it('lets a selected entity request its bounded local graph', async () => {
+  mockedFetchCommunities.mockResolvedValue([])
+  mockedFetchGraph.mockResolvedValue({
+    nodes: [{ id: 'node-a', label: 'Alpha', entityType: 'Concept' }],
+    edges: [],
+  })
+  mockedFetchSubgraph.mockImplementation(() => new Promise(() => undefined))
+
+  render(<GraphView />)
+
+  const alphaButton = (await screen.findAllByRole('button', { name: /Alpha/ }))[0]
+  fireEvent.click(alphaButton)
+
+  fireEvent.click(await screen.findByRole('button', { name: '展开局部图' }))
+
+  expect(mockedFetchSubgraph).toHaveBeenCalledWith('node-a')
+  expect(screen.getByRole('status', { name: 'graph-subgraph-loading' })).toBeInTheDocument()
 })
 
 it('keeps the selected entity in the keyboard list and returns focus to it', async () => {
