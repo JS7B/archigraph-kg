@@ -1,4 +1,4 @@
-from evals.metrics import split_assertion_sentences
+from evals.metrics import split_assertion_sentences, summarize_entity_recall
 
 
 def test_preserves_dotted_identifiers_versions_urls_and_citations():
@@ -21,3 +21,9 @@ def test_splits_english_period_without_splitting_url_query():
         "See https://example.com/a.b?q=1.2 [1].",
         "Next claim [2].",
     ]
+
+
+def test_entity_recall_reports_pooled_and_macro():
+    pooled, macro = summarize_entity_recall([8, 1], [10, 2])
+    assert pooled == 0.75
+    assert macro == 0.65

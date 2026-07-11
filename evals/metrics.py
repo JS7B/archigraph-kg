@@ -1,6 +1,7 @@
 """Deterministic helpers for evaluation metrics."""
 
 import re
+from statistics import mean
 
 
 _PROTECTED_DOT = "\ue000"
@@ -62,3 +63,21 @@ def split_assertion_sentences(text: str) -> list[str]:
                 sentences.append(sentence)
 
     return sentences
+
+
+def summarize_entity_recall(
+    hit_counts: list[int], gold_counts: list[int]
+) -> tuple[float, float]:
+    """Return annotation-pooled and per-document macro entity recall."""
+    if len(hit_counts) != len(gold_counts):
+        raise ValueError("hit_counts and gold_counts must have equal lengths")
+    if not hit_counts:
+        return 0.0, 0.0
+
+    total_gold = sum(gold_counts)
+    pooled = sum(hit_counts) / total_gold if total_gold else 0.0
+    macro = mean(
+        hits / gold if gold else 0.0
+        for hits, gold in zip(hit_counts, gold_counts, strict=True)
+    )
+    return pooled, macro

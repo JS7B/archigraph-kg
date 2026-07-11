@@ -25,7 +25,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "backend"))
 
-from evals.metrics import split_assertion_sentences  # noqa: E402
+from evals.metrics import split_assertion_sentences, summarize_entity_recall  # noqa: E402
 
 from app.clients.graph import close, get_driver, verify_connectivity  # noqa: E402
 from app.config import get_settings  # noqa: E402
@@ -197,8 +197,8 @@ def main():
 
     results = []
     all_parse_ok = True
-    total_gold_entities = 0
-    total_hit_entities = 0
+    entity_hit_counts = []
+    entity_gold_counts = []
     total_raw_relations = 0
     total_usable_relations = 0
     all_qa = []
@@ -227,12 +227,14 @@ def main():
             recall, missed = _entity_recall(entities, gt["entities"])
             unmatched = _unmatched_extracted(entities, gt["entities"])
             usable = _relation_usable(relations, ext_detail["raw_relations"])
-            total_gold_entities += len(gt["entities"])
-            total_hit_entities += round(recall * len(gt["entities"]))
+            gold_count = len({_norm(g["name"]) for g in gt["entities"]})
+            hit_count = gold_count - len({_norm(name) for name in missed})
+            entity_gold_counts.append(gold_count)
+            entity_hit_counts.append(hit_count)
             total_raw_relations += ext_detail["raw_relations"]
             total_usable_relations += ext_detail["merged_relations"]
             print(f"  实体召回率: {recall:.1%} (漏 {len(missed)})")
-            print(f"  抽出 {len(entities)} 实体 / 标注 {len(gt['entities'])}（未匹配抽出 {len(unmatched)}）")
+            print(f"  抽出 {len(entities)} 实体 / 标注 {gold_count}（未匹配抽出 {len(unmatched)}）")
             print(f"  关系可用率: {usable:.1%}")
 
             qa_results = []
@@ -249,9 +251,10 @@ def main():
                 "parse": parse_info,
                 "extraction": ext_detail,
                 "entity_recall": recall,
+                "entity_hit_count": hit_count,
                 "missed_entities": missed,
                 "extracted_total": len(entities),
-                "gold_total": len(gt["entities"]),
+                "gold_total": gold_count,
                 "unmatched_extracted": unmatched,
                 "relation_usable": usable,
                 "qa": qa_results,
@@ -263,14 +266,17 @@ def main():
 
     # 汇总指标
     parse_rate = 1.0 if all_parse_ok else sum(1 for r in results if r.get("parse", {}).get("ok")) / len(gold_truth)
-    entity_recall_overall = total_hit_entities / total_gold_entities if total_gold_entities else 0
+    entity_recall_pooled, entity_recall_macro = summarize_entity_recall(
+        entity_hit_counts, entity_gold_counts
+    )
     relation_usable_overall = total_usable_relations / total_raw_relations if total_raw_relations else 0
     citation_hit_overall = sum(q["citation_hit_rate"] for q in all_qa) / len(all_qa) if all_qa else 0
     hallucination_overall = sum(q["hallucination_rate"] for q in all_qa) / len(all_qa) if all_qa else 0
 
     summary = {
         "parse_success_rate": parse_rate,
-        "entity_recall": entity_recall_overall,
+        "entity_recall_pooled": entity_recall_pooled,
+        "entity_recall_macro": entity_recall_macro,
         "relation_usable_rate": relation_usable_overall,
         "citation_hit_rate": citation_hit_overall,
         "hallucination_rate": hallucination_overall,
@@ -279,7 +285,8 @@ def main():
     print("评估汇总")
     print("=" * 50)
     print(f"解析成功率:     {parse_rate:.1%}  (目标 100%)")
-    print(f"实体召回率:     {entity_recall_overall:.1%}  (目标 ≥70%)")
+    print(f"标注加权池化实体召回率: {entity_recall_pooled:.1%}  (目标 ≥70%)")
+    print(f"逐文档宏平均实体召回率: {entity_recall_macro:.1%}  (参考指标)")
     print(f"关系可用率:     {relation_usable_overall:.1%}  (目标 ≥60%)")
     print(f"引用命中率:     {citation_hit_overall:.1%}  (目标 ≥70%)")
     print(f"明显幻觉率:     {hallucination_overall:.1%}  (目标 ≤20%)")
@@ -300,7 +307,8 @@ def write_report(results: list, summary: dict, uncited: list) -> None:
         "| 指标 | 实测 | 目标 |",
         "|---|---|---|",
         f"| 解析成功率 | {summary['parse_success_rate']:.1%} | 100% |",
-        f"| 实体召回率 | {summary['entity_recall']:.1%} | ≥70% |",
+        f"| 标注加权池化实体召回率 | {summary['entity_recall_pooled']:.1%} | ≥70% |",
+        f"| 逐文档宏平均实体召回率 | {summary['entity_recall_macro']:.1%} | 参考指标 |",
         f"| 关系可用率 | {summary['relation_usable_rate']:.1%} | ≥60% |",
         f"| 引用命中率 | {summary['citation_hit_rate']:.1%} | ≥70% |",
         f"| 明显幻觉率 | {summary['hallucination_rate']:.1%} | ≤20% |",
