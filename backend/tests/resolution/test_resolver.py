@@ -5,6 +5,8 @@ from app.resolution import (
     ResolutionStatus,
     normalize_name,
 )
+from app.resolution.normalization import normalize_name as module_normalize_name
+import pytest
 
 
 def _canonical(canonical_id: str, name: str):
@@ -22,6 +24,7 @@ def test_normalize_name_is_unicode_case_punctuation_and_whitespace_stable():
     assert normalize_name(normalize_name(value)) == normalize_name(value)
     assert normalize_name("FAST API") == "fast api"
     assert normalize_name(" 中文，名称 ") == "中文名称"
+    assert module_normalize_name(value) == normalize_name(value)
 
 
 def test_exact_match_is_accepted_with_evidence():
@@ -87,6 +90,9 @@ def test_fuzzy_candidate_is_review_and_ties_do_not_choose_a_target():
     assert result.method is ResolutionMethod.FUZZY
     assert result.canonical_id is None
     assert "ambiguous" in result.reason
+    assert result.evidence is not None
+    assert result.evidence.canonical_id is None
+    assert result.evidence.source_chunk_id == "chunk-1"
 
 
 def test_unresolved_keeps_source_identity_without_evidence_or_target():
@@ -99,3 +105,10 @@ def test_unresolved_keeps_source_identity_without_evidence_or_target():
     assert result.canonical_id is None
     assert result.evidence is None
     assert result.source_entity_id == "doc-1::unknown"
+
+
+def test_alias_to_unknown_canonical_is_rejected():
+    resolver = _resolver(_canonical("canonical:fastapi", "FastAPI"))
+
+    with pytest.raises(ValueError, match="unknown canonical_id"):
+        resolver.register_alias("Fast API", "canonical:missing")

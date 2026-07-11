@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import difflib
-import unicodedata
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -15,26 +14,7 @@ from app.resolution.models import (
     ResolutionMethod,
     ResolutionStatus,
 )
-
-
-def normalize_name(value: str) -> str:
-    """Return a deterministic key for names across Unicode and casing variants.
-
-    NFKC folds full-width forms, ``casefold`` handles both English and other
-    case-aware scripts, punctuation is removed, and all Unicode whitespace is
-    collapsed to one ASCII space. Keeping the operation idempotent makes keys
-    safe to persist and re-use without conflating distinct word boundaries.
-    """
-
-    if not isinstance(value, str):
-        raise TypeError("name must be a string")
-    normalized = unicodedata.normalize("NFKC", value).casefold()
-    without_punctuation = "".join(
-        character
-        for character in normalized
-        if not unicodedata.category(character).startswith("P")
-    )
-    return " ".join(without_punctuation.split())
+from app.resolution.normalization import normalize_name
 
 
 class DeterministicResolver:
@@ -110,6 +90,8 @@ class DeterministicResolver:
         else:
             record = AliasRecord.model_validate(alias)
             alias_name, canonical_id = record.alias, record.canonical_id
+        if canonical_id not in self._canonicals:
+            raise ValueError(f"unknown canonical_id: {canonical_id}")
         self._add_key(self._aliases, alias_name, canonical_id)
 
     @staticmethod
@@ -206,6 +188,16 @@ class DeterministicResolver:
         reason: str,
     ) -> ResolutionCandidate:
         if len(ids) != 1:
+            score = 1.0
+            evidence = ResolutionEvidence(
+                source_entity_id=source_entity_id,
+                source_document_id=source_document_id,
+                source_chunk_id=source_chunk_id,
+                canonical_id=None,
+                method=method,
+                score=score,
+                reason=f"ambiguous {method.value} key maps to {len(ids)} canonical entities",
+            )
             return ResolutionCandidate(
                 source_entity_id=source_entity_id,
                 source_name=source_name,
@@ -213,7 +205,9 @@ class DeterministicResolver:
                 source_chunk_id=source_chunk_id,
                 status=ResolutionStatus.REVIEW,
                 method=method,
-                reason=f"ambiguous {method.value} key maps to {len(ids)} canonical entities",
+                score=score,
+                evidence=evidence,
+                reason=evidence.reason,
             )
         canonical_id = next(iter(ids))
         evidence = ResolutionEvidence(
@@ -265,6 +259,16 @@ class DeterministicResolver:
         best_score, best_id = scored[0]
         tied = len(scored) > 1 and best_score - scored[1][0] <= self.ambiguity_margin
         if tied:
+            reason = "ambiguous fuzzy candidates require review"
+            evidence = ResolutionEvidence(
+                source_entity_id=source_entity_id,
+                source_document_id=source_document_id,
+                source_chunk_id=source_chunk_id,
+                canonical_id=None,
+                method=ResolutionMethod.FUZZY,
+                score=best_score,
+                reason=reason,
+            )
             return ResolutionCandidate(
                 source_entity_id=source_entity_id,
                 source_name=source_name,
@@ -273,7 +277,8 @@ class DeterministicResolver:
                 status=ResolutionStatus.REVIEW,
                 method=ResolutionMethod.FUZZY,
                 score=best_score,
-                reason="ambiguous fuzzy candidates require review",
+                evidence=evidence,
+                reason=reason,
             )
         evidence = ResolutionEvidence(
             source_entity_id=source_entity_id,
