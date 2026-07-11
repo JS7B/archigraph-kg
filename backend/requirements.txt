@@ -12,3 +12,4 @@ sse-starlette
 httpx
 PyMuPDF
 pytest
+python-multipart
