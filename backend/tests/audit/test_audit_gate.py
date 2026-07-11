@@ -20,6 +20,14 @@ from audit_gate import (  # noqa: E402
 )
 
 
+def commit_path(repo: Path, relative_path: str) -> None:
+    path = repo / relative_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("change\n", encoding="utf-8")
+    run_git(repo, "add", relative_path)
+    run_git(repo, "commit", "-m", f"change {relative_path}")
+
+
 def run_git(repo: Path, *args: str) -> None:
     subprocess.run(
         ["git", *args],
@@ -49,6 +57,100 @@ def test_frontend_paths_select_all_frontend_gates():
     assert any(f"{npm} run typecheck" in command for command in rendered)
     assert any(f"{npm} run test:run" in command for command in rendered)
     assert any(f"{npm} run build" in command for command in rendered)
+
+
+def test_parsing_paths_select_targeted_backend_gate():
+    assert commands_for_paths(["backend/app/parsing/models.py"]) == [
+        [sys.executable, "-m", "pytest", "backend/tests/parsing", "-q"]
+    ]
+
+
+def test_extraction_paths_select_targeted_backend_gate():
+    assert commands_for_paths(["backend/app/extraction/models.py"]) == [
+        [sys.executable, "-m", "pytest", "backend/tests/extraction", "-q"]
+    ]
+
+
+def test_graph_and_graph_router_paths_select_targeted_backend_gate():
+    expected = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "backend/tests/graph",
+        "backend/tests/routers/test_graph.py",
+        "-q",
+    ]
+
+    assert commands_for_paths(["backend/app/graph/search.py"]) == [expected]
+    assert commands_for_paths(["backend/app/routers/graph.py"]) == [expected]
+
+
+def test_targeted_backend_gates_are_deduplicated_for_mixed_paths():
+    commands = commands_for_paths(
+        [
+            "backend/app/parsing/models.py",
+            "backend/tests/parsing/test_models.py",
+            "backend/app/extraction/models.py",
+            "backend/tests/extraction/test_models.py",
+            "backend/app/graph/search.py",
+            "backend/app/routers/graph.py",
+        ]
+    )
+
+    assert commands == [
+        [sys.executable, "-m", "pytest", "backend/tests/parsing", "-q"],
+        [sys.executable, "-m", "pytest", "backend/tests/extraction", "-q"],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "backend/tests/graph",
+            "backend/tests/routers/test_graph.py",
+            "-q",
+        ],
+    ]
+
+
+def test_new_quality_worktree_scopes_block_paths_outside_their_ownership(tmp_path):
+    cases = [
+        (
+            "feat/kg-parsing",
+            "backend/app/parsing/models.py",
+            "backend/app/extraction/models.py",
+        ),
+        (
+            "feat/kg-extraction",
+            "backend/app/extraction/models.py",
+            "backend/app/parsing/models.py",
+        ),
+        (
+            "feat/kg-resolution",
+            "backend/app/resolution/resolver.py",
+            "backend/app/extraction/models.py",
+        ),
+        (
+            "feat/kg-community-api",
+            "backend/app/routers/graph.py",
+            "backend/app/parsing/models.py",
+        ),
+        (
+            "feat/graph-experience",
+            "frontend/src/views/GraphView/GraphView.tsx",
+            "backend/app/routers/graph.py",
+        ),
+    ]
+
+    for branch, allowed_path, forbidden_path in cases:
+        repo = tmp_path / branch.replace("/", "-")
+        init_repo(repo)
+        run_git(repo, "switch", "-c", branch)
+        commit_path(repo, allowed_path)
+        report = audit_repository(repo)
+        assert not any("outside" in item for item in report.failures)
+
+        commit_path(repo, forbidden_path)
+        report = audit_repository(repo)
+        assert any(f"outside {branch} scope" in item for item in report.failures)
 
 
 def test_npm_launcher_uses_cmd_only_on_windows():
@@ -131,6 +233,7 @@ def test_audit_repository_runs_audit_tests_from_repo_root(tmp_path):
                 "pytest",
                 "backend/tests/audit",
                 "-q",
+                "--confcutdir=backend/tests/audit",
             ],
             repo,
         )

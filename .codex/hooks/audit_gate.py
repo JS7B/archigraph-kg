@@ -25,7 +25,36 @@ EVAL_COMMANDS = [
     [sys.executable, "-m", "pytest", "evals/tests", "-q"],
 ]
 AUDIT_COMMANDS = [
-    [sys.executable, "-m", "pytest", "backend/tests/audit", "-q"],
+    [
+        sys.executable,
+        "-m",
+        "pytest",
+        "backend/tests/audit",
+        "-q",
+        "--confcutdir=backend/tests/audit",
+    ],
+]
+PYTHON_PARSING_COMMAND = [
+    sys.executable,
+    "-m",
+    "pytest",
+    "backend/tests/parsing",
+    "-q",
+]
+PYTHON_EXTRACTION_COMMAND = [
+    sys.executable,
+    "-m",
+    "pytest",
+    "backend/tests/extraction",
+    "-q",
+]
+PYTHON_GRAPH_COMMAND = [
+    sys.executable,
+    "-m",
+    "pytest",
+    "backend/tests/graph",
+    "backend/tests/routers/test_graph.py",
+    "-q",
 ]
 
 BRANCH_SCOPES = {
@@ -36,6 +65,32 @@ BRANCH_SCOPES = {
         "backend/tests/audit/",
         "docs/audit-workflow.md",
         "docs/DEVLOG.md",
+    ),
+    "feat/kg-parsing": (
+        "backend/app/parsing/",
+        "backend/tests/parsing/",
+        "backend/DEVLOG.md",
+    ),
+    "feat/kg-extraction": (
+        "backend/app/extraction/",
+        "backend/tests/extraction/",
+        "backend/DEVLOG.md",
+    ),
+    "feat/kg-resolution": (
+        "backend/app/resolution/",
+        "backend/tests/resolution/",
+        "backend/DEVLOG.md",
+    ),
+    "feat/kg-community-api": (
+        "backend/app/graph/",
+        "backend/app/routers/graph.py",
+        "backend/tests/graph/",
+        "backend/tests/routers/test_graph.py",
+        "backend/DEVLOG.md",
+    ),
+    "feat/graph-experience": (
+        "frontend/",
+        "frontend/DEVLOG.md",
     ),
 }
 
@@ -213,6 +268,26 @@ def commands_for_paths(paths: list[str]) -> list[list[str]]:
         commands.extend(EVAL_COMMANDS)
     if any(path.startswith(".codex/") or path.startswith("backend/tests/audit/") for path in paths):
         commands.extend(AUDIT_COMMANDS)
+    if any(
+        path.startswith("backend/app/parsing/")
+        or path.startswith("backend/tests/parsing/")
+        for path in paths
+    ):
+        commands.append(PYTHON_PARSING_COMMAND)
+    if any(
+        path.startswith("backend/app/extraction/")
+        or path.startswith("backend/tests/extraction/")
+        for path in paths
+    ):
+        commands.append(PYTHON_EXTRACTION_COMMAND)
+    if any(
+        path.startswith("backend/app/graph/")
+        or path.startswith("backend/tests/graph/")
+        or path == "backend/app/routers/graph.py"
+        or path == "backend/tests/routers/test_graph.py"
+        for path in paths
+    ):
+        commands.append(PYTHON_GRAPH_COMMAND)
     return commands
 
 
