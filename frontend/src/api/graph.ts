@@ -1,5 +1,11 @@
 import { apiFetch } from './client'
-import type { GraphData, GraphEdge, GraphNode } from '../types'
+import type {
+  GraphCommunity,
+  GraphData,
+  GraphEdge,
+  GraphNode,
+  LocalSubgraph,
+} from '../types'
 
 /**
  * 图谱 API 领域层：后端调用 + 字段映射收口。
@@ -27,6 +33,7 @@ interface RawEdge {
   target: string
   type: string
   confidence?: number | null
+  evidenceChunkId?: string | null
 }
 interface RawGraph {
   nodes: RawNode[]
@@ -38,6 +45,7 @@ function mapNode(n: RawNode): GraphNode {
     id: n.id,
     label: n.name,
     entityType: n.type,
+    ...(typeof n.documentId === 'string' ? { documentId: n.documentId } : {}),
     // 后端字段可能未就绪：仅在存在时透传，缺省交给 View 层 edges 兜底
     ...(typeof n.degree === 'number' ? { degree: n.degree } : {}),
     ...(typeof n.mentionCount === 'number' ? { mentionCount: n.mentionCount } : {}),
@@ -50,6 +58,8 @@ function mapEdge(e: RawEdge): GraphEdge {
     source: e.source,
     target: e.target,
     relationType: e.type,
+    ...(e.confidence !== undefined ? { confidence: e.confidence } : {}),
+    ...(e.evidenceChunkId !== undefined ? { evidenceChunkId: e.evidenceChunkId } : {}),
   }
 }
 
@@ -77,4 +87,88 @@ export async function searchEntities(q: string, limit = 20): Promise<GraphNode[]
     `/api/graph/search?q=${encodeURIComponent(q)}&limit=${limit}`,
   )
   return raw.map(mapNode)
+}
+
+export interface CommunityQuery {
+  limit?: number
+  nodeLimit?: number
+  documentId?: string
+}
+
+export interface SubgraphQuery {
+  depth?: number
+  limit?: number
+  documentId?: string
+  type?: string
+  minConfidence?: number
+}
+
+function boundedInteger(value: number | undefined, fallback: number, max: number): number {
+  if (value === undefined || !Number.isFinite(value)) return fallback
+  return Math.min(max, Math.max(1, Math.floor(value)))
+}
+
+function appendOptionalParam(params: URLSearchParams, key: string, value: string | undefined) {
+  if (value) params.set(key, value)
+}
+
+/** Fetch bounded connected-component summaries for the local-first graph view. */
+export async function fetchCommunities(options: CommunityQuery = {}): Promise<GraphCommunity[]> {
+  const params = new URLSearchParams({
+    limit: String(boundedInteger(options.limit, 20, 100)),
+    nodeLimit: String(boundedInteger(options.nodeLimit, 200, 500)),
+  })
+  appendOptionalParam(params, 'documentId', options.documentId)
+  const raw = await apiFetch<RawCommunity[]>(`/api/graph/communities?${params.toString()}`)
+  return raw.map(mapCommunity)
+}
+
+/** Fetch a bounded local subgraph around one center entity. */
+export async function fetchSubgraph(
+  entityId: string,
+  options: SubgraphQuery = {},
+): Promise<LocalSubgraph> {
+  const params = new URLSearchParams({
+    depth: String(boundedInteger(options.depth, 1, 4)),
+    limit: String(boundedInteger(options.limit, 50, 100)),
+  })
+  appendOptionalParam(params, 'documentId', options.documentId)
+  appendOptionalParam(params, 'type', options.type)
+  if (options.minConfidence !== undefined && Number.isFinite(options.minConfidence)) {
+    params.set('minConfidence', String(Math.min(1, Math.max(0, options.minConfidence))))
+  }
+  const raw = await apiFetch<RawSubgraph>(
+    `/api/graph/entities/${encodeURIComponent(entityId)}/subgraph?${params.toString()}`,
+  )
+  return {
+    centerId: raw.centerId,
+    nodes: raw.nodes.map(mapNode),
+    edges: raw.edges.map(mapEdge),
+    metadata: raw.metadata,
+  }
+}
+
+interface RawCommunity {
+  id: string
+  representativeNode: RawNode
+  nodeCount: number
+  edgeCount: number
+  documentIds: string[]
+}
+
+interface RawSubgraph {
+  centerId: string
+  nodes: RawNode[]
+  edges: RawEdge[]
+  metadata: LocalSubgraph['metadata']
+}
+
+function mapCommunity(community: RawCommunity): GraphCommunity {
+  return {
+    id: community.id,
+    representativeNode: mapNode(community.representativeNode),
+    nodeCount: community.nodeCount,
+    edgeCount: community.edgeCount,
+    documentIds: community.documentIds,
+  }
 }
