@@ -4,8 +4,8 @@ import type { ElementDefinition } from 'cytoscape'
 import fcose from 'cytoscape-fcose'
 import { Button, Card, Chip, DataValue, Eyebrow, Panel } from '../../components/ui'
 import { ApiError } from '../../api/client'
-import { fetchGraph } from '../../api/graph'
-import type { GraphData, GraphEdge, GraphNode } from '../../types'
+import { fetchCommunities, fetchGraph, fetchSubgraph } from '../../api/graph'
+import type { GraphCommunity, GraphData, GraphEdge, GraphNode } from '../../types'
 import styles from './GraphView.module.css'
 
 // 注册 fcose 布局（大图布局质量明显优于内置 cose）。模块级注册一次即可。
@@ -174,48 +174,73 @@ export function GraphView() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const cyRef = useRef<cytoscape.Core | null>(null)
   const [graphData, setGraphData] = useState<GraphData | null>(null)
+  const [communities, setCommunities] = useState<GraphCommunity[]>([])
+  const [selectedCommunity, setSelectedCommunity] = useState<GraphCommunity | null>(null)
+  const [centerNodeId, setCenterNodeId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [subgraphLoading, setSubgraphLoading] = useState(false)
+  const [subgraphError, setSubgraphError] = useState<string | null>(null)
+  const [usingFallback, setUsingFallback] = useState(false)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   // 隐藏孤立节点（度数为 0），默认开：孤立点是噪声观感主源，一键切回全貌。不持久化。
   const [hideIsolated, setHideIsolated] = useState(true)
 
-  // 拉取全图（套 LibraryView 的 refresh + useEffect 模式，补自建 loading flag）。
+  const loadSubgraph = useCallback(
+    async (nodeId: string, community: GraphCommunity | null = null) => {
+      setSubgraphLoading(true)
+      setSubgraphError(null)
+      setCenterNodeId(nodeId)
+      if (community) setSelectedCommunity(community)
+      try {
+        const data = await fetchSubgraph(nodeId)
+        setGraphData(data)
+        setSelectedNode(community ? null : findGraphNode(data, data.centerId))
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : '局部图加载失败，请稍后重试'
+        setSubgraphError(msg)
+      } finally {
+        setSubgraphLoading(false)
+      }
+    },
+    [],
+  )
+
+  // Prefer bounded community/local data, but retain the existing entities API as a fallback.
   const refresh = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
+    setSubgraphError(null)
     try {
-      const data = await fetchGraph()
-      setGraphData(data)
-      setLoadError(null)
+      const available = await fetchCommunities()
+      setCommunities(available)
+      if (available.length > 0) {
+        setUsingFallback(false)
+        await loadSubgraph(available[0].representativeNode.id, available[0])
+        return
+      }
+      setUsingFallback(true)
+      setGraphData(await fetchGraph())
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : '请求失败，请确认后端已启动'
-      setLoadError(msg)
+      try {
+        setUsingFallback(true)
+        setGraphData(await fetchGraph())
+      } catch (fallbackErr) {
+        const source = fallbackErr instanceof ApiError ? fallbackErr : err
+        const msg = source instanceof ApiError ? source.message : '请求失败，请确认后端已启动'
+        setLoadError(msg)
+      }
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [loadSubgraph])
 
   useEffect(() => {
-    let cancelled = false
-    fetchGraph()
-      .then((data) => {
-        if (cancelled) return
-        setGraphData(data)
-        setLoadError(null)
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return
-        const msg = err instanceof ApiError ? err.message : '请求失败，请确认后端已启动'
-        setLoadError(msg)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    // The initial request drives the local-first loading lifecycle.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refresh()
+  }, [refresh])
 
   // Cytoscape elements 由 graphData 派生：附度数分档 class；隐藏孤立时滤掉度数 0 的点
   // 及其悬挂边（两端都需可见）。
@@ -355,10 +380,30 @@ export function GraphView() {
       </header>
 
       <div className={styles.canvasShell} aria-label="知识图谱画布">
-        {loading && <div className={styles.statusMsg}>加载图谱中…</div>}
-        {loadError && <div className={styles.statusMsg}>加载失败：{loadError}</div>}
+        {loading && (
+          <div
+            className={styles.statusMsg}
+            role="status"
+            aria-label={subgraphLoading ? 'graph-subgraph-loading' : 'graph-loading'}
+          >
+            {subgraphLoading ? '加载局部图中…' : '加载图谱中…'}
+          </div>
+        )}
+        {!loading && subgraphLoading && (
+          <div className={styles.statusMsg} role="status" aria-label="graph-subgraph-loading">
+            加载局部图中…
+          </div>
+        )}
+        {loadError && <div className={styles.statusMsg} role="status" aria-label="graph-error">加载失败：{loadError}</div>}
+        {subgraphError && (
+          <div className={styles.statusMsg} role="status" aria-label="graph-subgraph-error">
+            局部图加载失败：{subgraphError}
+          </div>
+        )}
         {isEmpty && (
-          <div className={styles.statusMsg}>知识库还没有实体。上传文档并完成入库后，这里会显示实体与关系。</div>
+          <div className={styles.statusMsg} role="status" aria-label="graph-empty">
+            知识库还没有实体。上传文档并完成入库后，这里会显示实体与关系。
+          </div>
         )}
         {/* 全部实体都是孤立点、被默认隐藏：画布会空白，给出提示而非静默空白 */}
         {allHidden && (
@@ -403,6 +448,30 @@ export function GraphView() {
             </Button>
           </div>
           <span className={styles.searchHint}>输入名称会高亮匹配节点，并弱化其他图谱元素。</span>
+          {communities.length > 0 && (
+            <div aria-label="communities">
+              <span className={styles.searchCaption}>社区</span>
+              <ul className={styles.entityList}>
+                {communities.map((community) => (
+                  <li key={community.id}>
+                    <button
+                      type="button"
+                      className={styles.entityListBtn}
+                      aria-pressed={selectedCommunity?.id === community.id}
+                      aria-current={centerNodeId === community.representativeNode.id ? 'true' : undefined}
+                      onClick={() => void loadSubgraph(community.representativeNode.id, community)}
+                    >
+                      <span className={styles.entityListLabel}>{community.representativeNode.label}</span>
+                      <span className={styles.entityListMeta}>
+                        <Chip tone="accent">{community.nodeCount} nodes</Chip>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {usingFallback && <span className={styles.searchHint}>社区接口暂不可用，已显示实体列表。</span>}
           <label className={styles.toggleRow}>
             <input
               type="checkbox"
@@ -423,6 +492,14 @@ export function GraphView() {
                   <Chip tone="accent">{selectedNode.entityType}</Chip>
                 </div>
                 <DataValue label="entity id">{selectedNode.id}</DataValue>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={subgraphLoading}
+                  onClick={() => void loadSubgraph(selectedNode.id)}
+                >
+                  {subgraphLoading ? '加载局部图中…' : '展开局部图'}
+                </Button>
               </div>
 
               <section className={styles.detailBody} aria-label="实体关系">
