@@ -55,11 +55,11 @@ export default function App() {
         <div className={styles.viewPane} hidden={view !== 'workbench'}><WorkbenchView /></div>
         <div className={styles.viewPane} hidden={view !== 'library'}><LibraryView /></div>
         {graphActivated && (
-          <Suspense
-            fallback={<div className={styles.viewPane} role="status">正在加载图谱视图…</div>}
-          >
-            <div className={styles.viewPane} hidden={view !== 'graph'}><LazyGraphView /></div>
-          </Suspense>
+          <div className={styles.viewPane} hidden={view !== 'graph'}>
+            <Suspense fallback={<div role="status">正在加载图谱视图…</div>}>
+              <LazyGraphView />
+            </Suspense>
+          </div>
         )}
       </main>
       {settingsOpen && (
