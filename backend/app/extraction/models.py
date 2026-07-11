@@ -167,3 +167,4 @@ class ExtractionStats(BaseModel):
     relation_count: int
     mention_count: int
     failed_chunks: list[ExtractionFailure] = Field(default_factory=list)
+    diagnostics: list[str] = Field(default_factory=list)

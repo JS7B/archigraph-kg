@@ -30,7 +30,8 @@ def extract_and_ingest(
     extractions, failures = extract_document(
         doc, max_attempts=max_attempts, on_progress=on_progress
     )
-    merged = merge_extractions(doc.document_id, extractions)
+    diagnostics: list[str] = []
+    merged = merge_extractions(doc.document_id, extractions, diagnostics=diagnostics)
     n_ent, n_rel, n_men = write_extraction(
         driver, doc.document_id, merged, database=database
     )
@@ -40,4 +41,5 @@ def extract_and_ingest(
         relation_count=n_rel,
         mention_count=n_men,
         failed_chunks=failures,
+        diagnostics=diagnostics,
     )
