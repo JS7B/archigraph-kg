@@ -130,3 +130,18 @@ def test_write_is_idempotent(ensured_schema):
         database_="neo4j",
     )
     assert rel_records[0]["n"] == 1
+
+
+def test_writer_relation_payload_keeps_evidence_chunk_id():
+    class FakeDriver:
+        def __init__(self):
+            self.calls = []
+
+        def execute_query(self, query, **params):
+            self.calls.append((query, params))
+
+    driver = FakeDriver()
+    write_extraction(driver, DOC_ID, _extraction())
+
+    relations = driver.calls[2][1]["relations"]
+    assert relations[0]["evidence_chunk_id"] == f"{DOC_ID}#0"

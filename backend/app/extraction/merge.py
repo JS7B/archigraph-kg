@@ -12,37 +12,59 @@ from collections import Counter
 from app.extraction.models import (
     ChunkExtraction,
     DocumentExtraction,
+    ExtractedEntity,
     MergedEntity,
     MergedRelation,
+)
+from app.extraction.validation import (
+    validate_entity_candidate,
+    validate_relation_candidate,
 )
 
 logger = logging.getLogger(__name__)
 
 _MAX_DESC = 500  # 聚合描述限长，避免无限增长
+ALLOWED_RELATION_TYPES = frozenset(
+    {"依赖", "组成", "使用", "导致", "缓解", "属于", "对比", "影响", "约束"}
+)
+MIN_RELATION_CONFIDENCE = 0.5
 
 
 def _normalize(name: str) -> str:
-    return name.lower().strip()
+    return name.casefold().strip()
 
 
 def merge_extractions(
-    document_id: str, extractions: list[ChunkExtraction]
+    document_id: str,
+    extractions: list[ChunkExtraction],
+    *,
+    diagnostics: list[str] | None = None,
 ) -> DocumentExtraction:
     """把逐 chunk 抽取结果合并为文档级实体与关系。"""
     entities: dict[str, MergedEntity] = {}
+    accepted_entities: list[ExtractedEntity] = []
     # 归一名 -> 各 type 的出现计数，用于 type 多数决（并列取先见，靠 Counter 插入序）
     type_counts: dict[str, Counter] = {}
 
     def _entity_id(norm: str) -> str:
         return f"{document_id}::{norm}"
 
+    def _report(chunk_id: str, kind: str, messages: list[str]) -> None:
+        message = f"{chunk_id} {kind}: {'; '.join(messages)}"
+        logger.warning("rejected extraction candidate: %s", message)
+        if diagnostics is not None:
+            diagnostics.append(message)
+
     # 第一遍：按 normalized_name 合并实体，累计 type 计数
     for extraction in extractions:
         chunk_id = extraction.chunk_id
         for ent in extraction.result.entities:
-            norm = _normalize(ent.name)
-            if not norm:
+            validation = validate_entity_candidate(ent)
+            if validation.status.value != "accepted":
+                _report(chunk_id, "entity", validation.diagnostics)
                 continue
+            accepted_entities.append(ent)
+            norm = _normalize(ent.name)
             type_counts.setdefault(norm, Counter())[ent.type] += 1
             if norm not in entities:
                 entities[norm] = MergedEntity(
@@ -74,23 +96,41 @@ def merge_extractions(
     for extraction in extractions:
         chunk_id = extraction.chunk_id
         for rel in extraction.result.relations:
+            validation = validate_relation_candidate(rel, accepted_entities)
+            if validation.status.value != "accepted":
+                _report(chunk_id, "relation", validation.diagnostics)
+                continue
+            relation_type = rel.type.strip()
+            relation_diagnostics: list[str] = []
+            if relation_type not in ALLOWED_RELATION_TYPES:
+                relation_diagnostics.append(
+                    f"type: unknown relation type {rel.type!r}"
+                )
+            if rel.confidence < MIN_RELATION_CONFIDENCE:
+                relation_diagnostics.append(
+                    f"confidence: below minimum {MIN_RELATION_CONFIDENCE:g}"
+                )
+            if relation_diagnostics:
+                _report(chunk_id, "relation", relation_diagnostics)
+                continue
             source_id = _resolve(rel.source, entities, _entity_id)
             target_id = _resolve(rel.target, entities, _entity_id)
             if source_id is None or target_id is None:
-                logger.warning(
-                    "丢弃无法解析两端的关系 %s -[%s]-> %s（chunk %s）",
-                    rel.source, rel.type, rel.target, chunk_id,
+                _report(
+                    chunk_id,
+                    "relation",
+                    ["endpoint: source or target is not an accepted entity"],
                 )
                 continue
-            rkey = (source_id, target_id, rel.type)
+            rkey = (source_id, target_id, relation_type)
             existing = relations.get(rkey)
             if existing is None or rel.confidence > existing.confidence:
                 relations[rkey] = MergedRelation(
                     source_id=source_id,
                     target_id=target_id,
-                    type=rel.type,
+                    type=relation_type,
                     confidence=rel.confidence,
-                    evidence_chunk_id=chunk_id,
+                    evidence_chunk_id=rel.evidence.chunk_id,
                 )
 
     return DocumentExtraction(

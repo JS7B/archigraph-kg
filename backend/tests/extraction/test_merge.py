@@ -4,12 +4,26 @@ from app.extraction.merge import merge_extractions
 from app.extraction.models import (
     ChunkExtraction,
     ChunkExtractionResult,
+    Evidence,
     ExtractedEntity,
     ExtractedRelation,
 )
 
 
-def _ce(chunk_id, entities=None, relations=None) -> ChunkExtraction:
+def _ce(chunk_id, entities=None, relations=None, *, hydrate_evidence=True) -> ChunkExtraction:
+    if hydrate_evidence:
+        entities = [
+            entity.model_copy(update={"evidence": _ev(chunk_id)})
+            if entity.evidence is None
+            else entity
+            for entity in (entities or [])
+        ]
+        relations = [
+            relation.model_copy(update={"evidence": _ev(chunk_id)})
+            if relation.evidence is None
+            else relation
+            for relation in (relations or [])
+        ]
     return ChunkExtraction(
         chunk_id=chunk_id,
         result=ChunkExtractionResult(
@@ -18,10 +32,14 @@ def _ce(chunk_id, entities=None, relations=None) -> ChunkExtraction:
     )
 
 
+def _ev(chunk_id: str, text: str = "source evidence") -> Evidence:
+    return Evidence(chunk_id=chunk_id, text=text)
+
+
 def test_same_name_type_merges_across_chunks():
     extractions = [
-        _ce("d#0", entities=[ExtractedEntity(name="FastAPI", type="技术概念", description="A")]),
-        _ce("d#1", entities=[ExtractedEntity(name="FastAPI", type="技术概念", description="B")]),
+        _ce("d#0", entities=[ExtractedEntity(name="FastAPI", type="技术", description="A")]),
+        _ce("d#1", entities=[ExtractedEntity(name="FastAPI", type="技术", description="B")]),
     ]
     result = merge_extractions("d", extractions)
     assert len(result.entities) == 1
@@ -32,8 +50,8 @@ def test_same_name_type_merges_across_chunks():
 
 def test_case_and_space_normalized():
     extractions = [
-        _ce("d#0", entities=[ExtractedEntity(name="FastAPI", type="技术概念")]),
-        _ce("d#1", entities=[ExtractedEntity(name="  fastapi ", type="技术概念")]),
+        _ce("d#0", entities=[ExtractedEntity(name="FastAPI", type="技术")]),
+        _ce("d#1", entities=[ExtractedEntity(name="  fastapi ", type="技术")]),
     ]
     result = merge_extractions("d", extractions)
     assert len(result.entities) == 1
@@ -120,3 +138,110 @@ def test_relation_dedup_keeps_higher_confidence():
     result = merge_extractions("d", extractions)
     assert len(result.relations) == 1
     assert result.relations[0].confidence == 0.9
+
+
+def test_missing_evidence_is_not_merged():
+    extraction = _ce(
+        "d#0",
+        entities=[ExtractedEntity(name="FastAPI", type="技术")],
+        hydrate_evidence=False,
+    )
+
+    result = merge_extractions("d", [extraction])
+
+    assert result.entities == []
+
+
+def test_rejected_candidates_are_reported_to_optional_diagnostics():
+    extraction = _ce(
+        "d#0",
+        entities=[ExtractedEntity(name="FastAPI", type="技术")],
+        hydrate_evidence=False,
+    )
+    diagnostics: list[str] = []
+
+    merge_extractions("d", [extraction], diagnostics=diagnostics)
+
+    assert diagnostics
+    assert "evidence" in diagnostics[0]
+
+
+def test_unknown_relation_type_is_not_merged():
+    entities = [
+        ExtractedEntity(name="A", type="项目", evidence=_ev("d#0")),
+        ExtractedEntity(name="B", type="项目", evidence=_ev("d#0")),
+    ]
+    relation = ExtractedRelation(
+        source="A",
+        target="B",
+        type="相关",
+        confidence=0.9,
+        evidence=_ev("d#0"),
+    )
+
+    result = merge_extractions("d", [_ce("d#0", entities, [relation])])
+
+    assert result.relations == []
+
+
+def test_relation_with_dangling_endpoint_is_not_merged_even_with_evidence():
+    entities = [ExtractedEntity(name="A", type="项目", evidence=_ev("d#0"))]
+    relation = ExtractedRelation(
+        source="A",
+        target="Missing",
+        type="依赖",
+        confidence=0.9,
+        evidence=_ev("d#0"),
+    )
+
+    result = merge_extractions("d", [_ce("d#0", entities, [relation])])
+
+    assert result.relations == []
+
+
+def test_out_of_range_relation_confidence_is_not_merged():
+    entities = [
+        ExtractedEntity(name="A", type="项目", evidence=_ev("d#0")),
+        ExtractedEntity(name="B", type="项目", evidence=_ev("d#0")),
+    ]
+    relation = ExtractedRelation(
+        source="A",
+        target="B",
+        type="依赖",
+        confidence=1.1,
+        evidence=_ev("d#0"),
+    )
+
+    result = merge_extractions("d", [_ce("d#0", entities, [relation])])
+
+    assert result.relations == []
+
+
+def test_relation_dedup_keeps_high_confidence_evidence_chunk():
+    entities = [
+        ExtractedEntity(name="A", type="项目", evidence=_ev("d#0")),
+        ExtractedEntity(name="B", type="项目", evidence=_ev("d#0")),
+    ]
+    low = ExtractedRelation(
+        source="A",
+        target="B",
+        type="依赖",
+        confidence=0.6,
+        evidence=_ev("d#0"),
+    )
+    high = ExtractedRelation(
+        source="A",
+        target="B",
+        type="依赖",
+        confidence=0.9,
+        evidence=_ev("d#1"),
+    )
+
+    result = merge_extractions(
+        "d",
+        [_ce("d#0", entities, [low]), _ce("d#1", entities, [high])],
+    )
+
+    assert len(result.relations) == 1
+    assert result.relations[0].confidence == 0.9
+    assert result.relations[0].evidence_chunk_id == "d#1"
