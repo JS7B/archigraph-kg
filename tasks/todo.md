@@ -269,12 +269,23 @@
 
 批次遗留（非阻断，后续排期）：
 
-- [ ] 评估分句器 Markdown 感知化（B6 Markdown 输出致幻觉指标假阳性 16.7%→26.5%，逐条核查 0 条真编造；分句器不应把 Cytoscape.js 的点号当句界）
+- [x] 评估分句器 Markdown 感知化（代码围栏/列表/URL/连续标点/引用角标均有确定性回归测试，Cytoscape.js 不再被错误分句）
 - [ ] backend/app/extraction/models.py 陈旧注释（entity_id 格式已去 type）+ writer/chat 测试统一新 entity_id 格式
-- [ ] evals 汇总口径补说明（87.7% 为标注加权池化值，宏平均 86.6%）
+- [x] evals 汇总口径补说明（同时输出标注加权池化值与逐文档宏平均；解析失败按零命中计入，避免指标虚高）
 - [ ] F1 引用式链接定义 `[1]: url` 与角标碰撞（罕见）、引用芯片 aria-label 补文档来源
 - [ ] F2 搜索命中被隐藏孤立节点时的反馈、自环/重边度数口径、toggle 重排 randomize 跳变
 - [ ] F3 StyleGallery 预览微动画措辞、非 idle 初始一帧闪跳（useLayoutEffect）、sceneMap.detail 死字段
+
+### 质量升级与并行审计批次（2026-07-11，规格见 docs/superpowers/specs/2026-07-11-quality-upgrade-parallel-audit-design.md）
+
+- [x] 前端建立 lint/typecheck/Vitest/build 四道质量门禁，补 5 个测试文件、12 项行为回归；RunEvent 终态、列表请求与懒加载切页竞态均由真实时序测试覆盖。
+- [x] 图谱工作区按路由懒加载，入口 JS 从 951.42 kB 降至 385.07 kB；568.55 kB 图谱异步 chunk 的既有告警如实保留，未提高阈值掩盖。
+- [x] 评估指标拆出可单测模块，Markdown 感知分句与 pooled/macro 召回口径共 13 项测试通过。
+- [x] 建立项目级 Stop/SubagentStop Hook：限定三条工作线范围、执行对应门禁、异常 fail closed、ASCII JSON 防 Windows GBK、`stop_hook_active` 防循环。
+- [x] Windows Hook 使用 `npm.cmd`，真实审计前端 worktree 的四道门禁返回 `{"continue": true}`；审计基础设施 21 项测试通过。
+- [x] 三条工作线均经过主窗口与独立只读复审，最终 Critical/Important 均为 0；按 audit → evaluation → frontend 顺序合并。
+
+验证：后端 179 passed（含 Neo4j 与已配置 LLM 集成用例）；前端 lint/typecheck/12 tests/build 通过；评估 13 passed；Docker Compose 中 Neo4j healthy。
 
 ## Review
 
