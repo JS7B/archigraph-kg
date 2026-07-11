@@ -287,6 +287,16 @@
 
 验证：后端 179 passed（含 Neo4j 与已配置 LLM 集成用例）；前端 lint/typecheck/12 tests/build 通过；评估 13 passed；Docker Compose 中 Neo4j healthy。
 
+## KG Quality Reconstruction (2026-07-12)
+
+- [x] Evaluation fixtures and quality gates
+- [x] Content-aware parsing: code/config/table/list/log metadata and chunk propagation
+- [x] Extraction candidate/evidence validation, policy-aware LLM routing, merge governance, diagnostics
+- [x] Deterministic cross-document resolution with exact/alias/review evidence
+- [x] Bounded local-subgraph and deterministic community APIs with evidence/document filters
+- [x] Local-first frontend graph experience with stable layout and evidence detail
+- [x] Final audit, regression verification, and worktree cleanup
+
 ## Review
 
 - 2026-06-16：将项目定位为个人知识图谱 GraphRAG Agent。确认 OpenAI-compatible 调用和 Neo4j 图谱存储，形成初始实现路线。
