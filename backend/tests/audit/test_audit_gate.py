@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / ".codex" / "hooks"))
 
 from audit_gate import (  # noqa: E402
+    _is_allowed,
     audit_repository,
     changed_paths,
     commands_for_paths,
@@ -144,6 +145,15 @@ def test_audit_branch_rejects_paths_outside_its_owned_scope(tmp_path):
     assert any("outside feat/audit-infrastructure scope" in item for item in report.failures)
 
 
+def test_scope_file_entries_require_exact_match():
+    allowed = ("evals/", "docs/evaluation.md")
+
+    assert _is_allowed("docs/evaluation.md", allowed)
+    assert not _is_allowed("docs/evaluation.md.bak", allowed)
+    assert not _is_allowed("docs/evaluation.md/child", allowed)
+    assert _is_allowed("evals/tests/test_metrics.py", allowed)
+
+
 def test_missing_frontend_package_scripts_are_informational_off_quality_branch(tmp_path):
     repo = tmp_path / "repo"
     init_repo(repo)
@@ -161,6 +171,56 @@ def test_missing_frontend_package_scripts_are_informational_off_quality_branch(t
     assert any("Skipped npm run test:run" in item for item in report.information)
 
 
+def test_bad_base_is_reported_without_raising(tmp_path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    run_git(repo, "switch", "-c", "feat/other")
+
+    report = audit_repository(repo, base="missing-audit-base")
+
+    assert any("missing-audit-base" in item for item in report.failures)
+
+
+def test_missing_npm_is_recorded_as_audit_failure(tmp_path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    run_git(repo, "switch", "-c", "feat/frontend-quality")
+    frontend_file = repo / "frontend" / "src" / "App.tsx"
+    frontend_file.parent.mkdir(parents=True)
+    frontend_file.write_text("export {};\n", encoding="utf-8")
+    run_git(repo, "add", "frontend/src/App.tsx")
+    run_git(repo, "commit", "-m", "frontend")
+
+    def missing_npm(
+        command: list[str], cwd: Path
+    ) -> subprocess.CompletedProcess[str]:
+        raise FileNotFoundError("npm is missing")
+
+    report = audit_repository(repo, run_command=missing_npm)
+
+    assert any("npm run lint" in item and "npm is missing" in item for item in report.failures)
+
+
+def test_unexpected_executor_exception_is_recorded_as_audit_failure(tmp_path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    run_git(repo, "switch", "-c", "feat/audit-infrastructure")
+    hook = repo / ".codex" / "hooks" / "audit_gate.py"
+    hook.parent.mkdir(parents=True)
+    hook.write_text("# audit\n", encoding="utf-8")
+    run_git(repo, "add", ".codex/hooks/audit_gate.py")
+    run_git(repo, "commit", "-m", "audit")
+
+    def broken_runner(
+        command: list[str], cwd: Path
+    ) -> subprocess.CompletedProcess[str]:
+        raise RuntimeError("runner exploded")
+
+    report = audit_repository(repo, run_command=broken_runner)
+
+    assert any("runner exploded" in item for item in report.failures)
+
+
 def test_cli_returns_continue_for_clean_feature_repo(tmp_path):
     repo = tmp_path / "repo"
     init_repo(repo)
@@ -169,6 +229,55 @@ def test_cli_returns_continue_for_clean_feature_repo(tmp_path):
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / ".codex" / "hooks" / "audit_gate.py"), "--repo", str(repo)],
         input="{}",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert json.loads(result.stdout) == {"continue": True}
+
+
+def test_cli_bad_json_fails_closed_with_ascii_decision(tmp_path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    run_git(repo, "switch", "-c", "feat/other")
+
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / ".codex" / "hooks" / "audit_gate.py"), "--repo", str(repo)],
+        input="{",
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 0
+    assert payload["decision"] == "block"
+    assert "invalid hook input" in payload["reason"]
+    assert result.stdout.isascii()
+
+
+def test_cli_missing_repo_fails_closed_with_ascii_decision(tmp_path):
+    missing_repo = tmp_path / "missing"
+
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / ".codex" / "hooks" / "audit_gate.py"), "--repo", str(missing_repo)],
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 0
+    assert payload["decision"] == "block"
+    assert "audit gate failed" in payload["reason"]
+    assert result.stdout.isascii()
+
+
+def test_active_stop_hook_bypasses_missing_repo_after_valid_json(tmp_path):
+    missing_repo = tmp_path / "missing"
+
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / ".codex" / "hooks" / "audit_gate.py"), "--repo", str(missing_repo)],
+        input=json.dumps({"stop_hook_active": True}),
         capture_output=True,
         text=True,
         check=True,

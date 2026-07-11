@@ -107,7 +107,16 @@ def _npm_script_exists(repo: Path, script: str) -> bool:
 
 
 def _is_allowed(path: str, allowed: tuple[str, ...]) -> bool:
-    return any(path == item or path.startswith(item) for item in allowed)
+    return any(
+        path.startswith(item) if item.endswith("/") else path == item
+        for item in allowed
+    )
+
+
+def _exception_failure(context: str, error: Exception) -> str:
+    detail = str(error).strip()
+    suffix = f": {detail}" if detail else ""
+    return f"{context}: {type(error).__name__}{suffix}"
 
 
 def audit_repository(
@@ -118,52 +127,73 @@ def audit_repository(
         [list[str], Path], subprocess.CompletedProcess[str]
     ] = _default_command_runner,
 ) -> AuditReport:
-    repo = repo.resolve()
-    branch = _current_branch(repo)
-    paths = changed_paths(repo, base)
-    report = AuditReport(branch=branch)
+    report = AuditReport(branch="")
+    try:
+        repo = repo.resolve()
+        report.branch = _current_branch(repo)
+        paths = changed_paths(repo, base)
+    except Exception as error:
+        report.failures.append(_exception_failure("audit setup failed", error))
+        return report
 
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    if status.stdout:
-        report.failures.append("worktree has uncommitted changes")
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        if status.stdout:
+            report.failures.append("worktree has uncommitted changes")
+    except Exception as error:
+        report.failures.append(_exception_failure("git status failed", error))
 
     for args in (
         ("diff", "--check", f"{base}...HEAD", "--"),
         ("diff", "--check", "--"),
         ("diff", "--cached", "--check", "--"),
     ):
-        failure = _run_git_check(repo, *args)
-        if failure:
-            report.failures.append(failure)
+        try:
+            failure = _run_git_check(repo, *args)
+            if failure:
+                report.failures.append(failure)
+        except Exception as error:
+            report.failures.append(
+                _exception_failure(f"git {' '.join(args)} failed", error)
+            )
 
-    allowed = BRANCH_SCOPES.get(branch)
+    allowed = BRANCH_SCOPES.get(report.branch)
     if allowed:
         out_of_scope = [path for path in paths if not _is_allowed(path, allowed)]
         if out_of_scope:
             report.failures.append(
-                f"paths outside {branch} scope: {', '.join(out_of_scope)}"
+                f"paths outside {report.branch} scope: {', '.join(out_of_scope)}"
             )
 
     for command in commands_for_paths(paths):
         cwd = repo / "frontend" if command[0] == "npm" else repo
-        if command[:2] == ["npm", "run"] and branch != "feat/frontend-quality":
-            script = command[2]
-            if not _npm_script_exists(repo, script):
-                report.information.append(
-                    f"Skipped npm run {script}: script is absent and branch is not feat/frontend-quality"
-                )
+        try:
+            if (
+                command[:2] == ["npm", "run"]
+                and report.branch != "feat/frontend-quality"
+            ):
+                script = command[2]
+                if not _npm_script_exists(repo, script):
+                    report.information.append(
+                        f"Skipped npm run {script}: script is absent and branch is not feat/frontend-quality"
+                    )
+                    continue
+            result = run_command(command, cwd)
+            if result.returncode == 0:
                 continue
-        result = run_command(command, cwd)
-        if result.returncode != 0:
-            detail = (result.stdout + result.stderr).strip()
+            detail = ((result.stdout or "") + (result.stderr or "")).strip()
             report.failures.append(
                 f"{' '.join(command)} failed in {cwd}: {detail[-2000:]}"
+            )
+        except Exception as error:
+            report.failures.append(
+                _exception_failure(f"{' '.join(command)} failed in {cwd}", error)
             )
 
     return report
@@ -194,6 +224,10 @@ def render_decision(decision: dict[str, object]) -> str:
     return json.dumps(decision)
 
 
+def _blocked_by_exception(context: str, error: Exception) -> dict[str, object]:
+    return {"decision": "block", "reason": _exception_failure(context, error)}
+
+
 def _read_event() -> dict[str, object]:
     raw = sys.stdin.read()
     return json.loads(raw) if raw.strip() else {}
@@ -203,17 +237,31 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the read-only branch audit gate.")
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     args = parser.parse_args()
-    event = _read_event()
-    branch = _current_branch(args.repo)
-    stop_hook_active = event.get("stop_hook_active") is True
+    try:
+        event = _read_event()
+        if not isinstance(event, dict):
+            raise ValueError("hook input must be a JSON object")
+        stop_hook_active = event.get("stop_hook_active") is True
+    except Exception as error:
+        decision = _blocked_by_exception("invalid hook input", error)
+        print(render_decision(decision))
+        return
 
-    if branch == "main" or not branch.startswith("feat/") or stop_hook_active:
-        decision = {"continue": True}
-    else:
-        report = audit_repository(args.repo)
-        for item in report.information:
-            print(item, file=sys.stderr)
-        decision = hook_decision(branch, False, report.failures)
+    if stop_hook_active:
+        print(render_decision({"continue": True}))
+        return
+
+    try:
+        branch = _current_branch(args.repo)
+        if branch == "main" or not branch.startswith("feat/"):
+            decision = {"continue": True}
+        else:
+            report = audit_repository(args.repo)
+            for item in report.information:
+                print(item, file=sys.stderr)
+            decision = hook_decision(branch, False, report.failures)
+    except Exception as error:
+        decision = _blocked_by_exception("audit gate failed", error)
     print(render_decision(decision))
 
 

@@ -12,16 +12,20 @@ Hook 的通用入口使用 `python3`，Windows 则通过 `commandWindows` 使用
 
 ## 审计内容
 
-审计脚本只审计 `feat/*`；`main` 和其他分支直接放行，因为合并权属于主窗口。功能分支会执行以下只读检查：
+审计脚本只审计 `feat/*`；`main` 和其他分支直接放行，因为合并权属于主窗口。功能分支会执行以下确定性检查：
 
 - 收集 `main...HEAD`、未暂存和已暂存的改动路径，按首次出现顺序去重；
 - 检查工作树是否干净，并分别运行提交、未暂存和已暂存差异的 `git diff --check`；
-- 对三条固定工作线检查文件范围，防止工人越界修改；
+- 对三条固定工作线检查文件范围；尾随 `/` 的目录白名单允许前缀匹配，文件白名单只允许精确匹配，防止 `.bak` 或伪子路径越权；
 - `frontend/` 改动选择 lint、typecheck、Vitest 和构建，`evals/`/评估文档改动选择评估单测，Hook/审计测试改动选择审计单测；
 - Python 单测命令使用启动 Hook 的 `sys.executable -m pytest`，复用已经选定的环境，不在 Windows `commandWindows` 外层之内再次嵌套 `conda run`；
 - 非前端质量分支缺少某个 npm script 时明确记录为跳过，避免无关分支因尚未合并的前端脚本失败。
 
-脚本不会读取或输出 `.env`，不会运行真实 LLM 评估，也不会写文件、提交、合并或推送。首次失败输出 `{"decision":"block","reason":"..."}`，提示 Codex 继续修正；JSON 保持 ASCII 安全，非 ASCII 原因会转义后写入 stdout，并可由 JSON 解析恢复原文。若事件已带 `stop_hook_active=true`，脚本返回 `{"continue":true}`，避免同一个停止事件无限循环。
+门禁本身不修改源码、不提交、不合并、不推送，也不读取或输出 `.env`、不访问真实 LLM 等外部服务。它选择的 `npm run build` 和 pytest 可能生成被 gitignore 的构建目录、测试缓存或字节码，这些属于验证命令的本地产物，而不是源码改动。
+
+缺少可执行文件、git baseline/diff 失败、坏 Hook JSON 或验证执行器异常都会 fail closed：stdout 仍返回 `{"decision":"block","reason":"..."}`，而不是以裸 exit 1 丢失 continuation 指令。JSON 保持 ASCII 安全，非 ASCII 原因会转义后写入 stdout，并可由 JSON 解析恢复原文。只有成功解析输入后发现 `stop_hook_active=true` 才优先返回 `{"continue":true}`，避免同一个停止事件无限循环。
+
+该 gate 面向受信任仓库中的协作质量检查，不是针对恶意分支的安全边界：功能分支能够修改自身 Hook 文件，验证命令也会执行分支中的 npm/pytest 配置。不要在未审阅、未信任的外来分支上依赖它提供隔离；安全决策仍由 Codex Hook 信任流程、运行权限和主窗口终审承担。
 
 ## 手动调用与故障排查
 
