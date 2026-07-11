@@ -52,6 +52,14 @@ PYTHON_EXTRACTION_COMMAND = [
     "--ignore=backend/tests/extraction/test_writer.py",
     "--ignore=backend/tests/extraction/test_llm_real.py",
 ]
+PYTHON_RESOLUTION_COMMAND = [
+    sys.executable,
+    "-m",
+    "pytest",
+    "backend/tests/resolution",
+    "-q",
+    "--confcutdir=backend/tests/resolution",
+]
 PYTHON_GRAPH_COMMAND = [
     sys.executable,
     "-m",
@@ -284,6 +292,12 @@ def commands_for_paths(paths: list[str]) -> list[list[str]]:
         for path in paths
     ):
         commands.append(PYTHON_EXTRACTION_COMMAND)
+    if any(
+        path.startswith("backend/app/resolution/")
+        or path.startswith("backend/tests/resolution/")
+        for path in paths
+    ):
+        commands.append(PYTHON_RESOLUTION_COMMAND)
     if any(
         path.startswith("backend/app/graph/")
         or path.startswith("backend/tests/graph/")

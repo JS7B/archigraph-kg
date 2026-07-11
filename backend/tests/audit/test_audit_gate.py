@@ -87,6 +87,22 @@ def test_extraction_paths_select_targeted_backend_gate():
     ]
 
 
+def test_resolution_paths_select_targeted_backend_gate():
+    expected = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "backend/tests/resolution",
+        "-q",
+        "--confcutdir=backend/tests/resolution",
+    ]
+
+    assert commands_for_paths(["backend/app/resolution/resolver.py"]) == [expected]
+    assert commands_for_paths(["backend/tests/resolution/test_resolver.py"]) == [
+        expected
+    ]
+
+
 def test_graph_and_graph_router_paths_select_targeted_backend_gate():
     expected = [
         sys.executable,
