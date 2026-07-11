@@ -16,20 +16,10 @@ FRONTEND_COMMANDS = [
     ["npm", "run", "build"],
 ]
 EVAL_COMMANDS = [
-    ["conda", "run", "-n", "myself", "python", "-m", "pytest", "evals/tests", "-q"],
+    [sys.executable, "-m", "pytest", "evals/tests", "-q"],
 ]
 AUDIT_COMMANDS = [
-    [
-        "conda",
-        "run",
-        "-n",
-        "myself",
-        "python",
-        "-m",
-        "pytest",
-        "backend/tests/audit",
-        "-q",
-    ],
+    [sys.executable, "-m", "pytest", "backend/tests/audit", "-q"],
 ]
 
 BRANCH_SCOPES = {
@@ -200,6 +190,10 @@ def hook_decision(
     return {"continue": True}
 
 
+def render_decision(decision: dict[str, object]) -> str:
+    return json.dumps(decision)
+
+
 def _read_event() -> dict[str, object]:
     raw = sys.stdin.read()
     return json.loads(raw) if raw.strip() else {}
@@ -220,7 +214,7 @@ def main() -> None:
         for item in report.information:
             print(item, file=sys.stderr)
         decision = hook_decision(branch, False, report.failures)
-    print(json.dumps(decision, ensure_ascii=False))
+    print(render_decision(decision))
 
 
 if __name__ == "__main__":

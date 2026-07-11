@@ -18,9 +18,10 @@ Hook 的通用入口使用 `python3`，Windows 则通过 `commandWindows` 使用
 - 检查工作树是否干净，并分别运行提交、未暂存和已暂存差异的 `git diff --check`；
 - 对三条固定工作线检查文件范围，防止工人越界修改；
 - `frontend/` 改动选择 lint、typecheck、Vitest 和构建，`evals/`/评估文档改动选择评估单测，Hook/审计测试改动选择审计单测；
+- Python 单测命令使用启动 Hook 的 `sys.executable -m pytest`，复用已经选定的环境，不在 Windows `commandWindows` 外层之内再次嵌套 `conda run`；
 - 非前端质量分支缺少某个 npm script 时明确记录为跳过，避免无关分支因尚未合并的前端脚本失败。
 
-脚本不会读取或输出 `.env`，不会运行真实 LLM 评估，也不会写文件、提交、合并或推送。首次失败输出 `{"decision":"block","reason":"..."}`，提示 Codex 继续修正；若事件已带 `stop_hook_active=true`，脚本返回 `{"continue":true}`，避免同一个停止事件无限循环。
+脚本不会读取或输出 `.env`，不会运行真实 LLM 评估，也不会写文件、提交、合并或推送。首次失败输出 `{"decision":"block","reason":"..."}`，提示 Codex 继续修正；JSON 保持 ASCII 安全，非 ASCII 原因会转义后写入 stdout，并可由 JSON 解析恢复原文。若事件已带 `stop_hook_active=true`，脚本返回 `{"continue":true}`，避免同一个停止事件无限循环。
 
 ## 手动调用与故障排查
 
@@ -38,7 +39,7 @@ python3 .codex/hooks/audit_gate.py --repo <worktree>
 
 成功时 stdout 是 `{"continue": true}`；失败时 stdout 是带原因的 `decision: block` JSON。手动调用适用于当前会话尚未加载 Hook，或主窗口终审某个物理 worktree。它只证明确定性门禁通过，不能替代主窗口检查 `main...branch` 完整 diff、提交范围、依赖锁文件、DEVLOG、密钥与运行数据边界。
 
-Windows 上 `conda run` 在转发包含 Unicode 的 pytest 输出时，个别终端可能触发 GBK 编码错误。此时先 `conda activate myself`，再用当前环境 PATH 中的 `python` 运行同一脚本；不要把某台机器的 Python 绝对路径写成仓库唯一入口。Hook 仍保留可迁移的通用命令与 Windows override。
+Windows override 只用 `conda run` 启动一次 Hook；脚本内部的 pytest 复用 `sys.executable`，不会再套一层 Conda。失败原因即使包含 Unicode，也会作为 ASCII 转义的 JSON 输出，从而避开 Conda 转发 Unicode pytest 文本时可能出现的 GBK 编码错误。手动排障时也可先 `conda activate myself`，再用当前环境 PATH 中的 `python` 运行同一脚本；不要把某台机器的 Python 绝对路径写成仓库唯一入口。
 
 ## Heartbeat 与收尾
 

@@ -14,6 +14,7 @@ from audit_gate import (  # noqa: E402
     changed_paths,
     commands_for_paths,
     hook_decision,
+    render_decision,
 )
 
 
@@ -88,6 +89,14 @@ def test_policy_selects_each_non_frontend_gate_once():
     assert sum("pytest backend/tests/audit" in command for command in rendered) == 1
 
 
+def test_python_gates_reuse_the_hook_interpreter():
+    commands = commands_for_paths(
+        ["evals/run_eval.py", ".codex/hooks/audit_gate.py"]
+    )
+
+    assert all(command[:3] == [sys.executable, "-m", "pytest"] for command in commands)
+
+
 def test_audit_repository_runs_audit_tests_from_repo_root(tmp_path):
     repo = tmp_path / "repo"
     init_repo(repo)
@@ -109,11 +118,7 @@ def test_audit_repository_runs_audit_tests_from_repo_root(tmp_path):
     assert calls == [
         (
             [
-                "conda",
-                "run",
-                "-n",
-                "myself",
-                "python",
+                sys.executable,
                 "-m",
                 "pytest",
                 "backend/tests/audit",
@@ -201,6 +206,15 @@ def test_cli_blocks_once_for_failed_feature_repo(tmp_path):
 
     assert json.loads(blocked.stdout)["decision"] == "block"
     assert json.loads(allowed.stdout) == {"continue": True}
+
+
+def test_non_ascii_failure_reason_is_ascii_safe_and_round_trips():
+    decision = hook_decision("feat/audit", False, ["中文失败"])
+
+    output = render_decision(decision)
+
+    assert output.isascii()
+    assert json.loads(output) == decision
 
 
 def test_stop_hooks_use_one_cross_platform_command_handler_each():

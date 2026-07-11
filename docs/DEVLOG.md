@@ -71,5 +71,5 @@
 - **做了什么**：新增项目级 `Stop` / `SubagentStop` Hook 和可手动调用的只读分支审计脚本，覆盖改动范围、工作树、`git diff --check` 与板块验证命令，并补齐成功、失败和防循环测试。
 - **这是什么**：Hook 是代理生命周期中的机械门禁，在 Codex 准备停止时执行确定性脚本；heartbeat 是定期查看并行工作线状态的只读观察者；主窗口则是阅读完整 diff、运行最终验证并决定是否合并的人。
 - **为什么需要**：实现工人容易只验证自己刚改的局部，且多个 worktree 并行时问题可能较晚才暴露。三层审计让即时失败、跨窗口进度和最终合并分别有人负责，同时保持每条工作线的责任边界。
-- **为什么这么做**：把路径选择与 Hook JSON 决策写成可单测的 Python 逻辑，并让 Hook 和主窗口复用同一个 CLI；失败只请求继续一次，`stop_hook_active=true` 后放行，既能促使代理修正又不会无限循环。Hook 使用通用 `python3` 入口和 Windows `conda run` 覆盖，路径始终从 git 根目录解析，不把个人绝对路径固化为跨机器方案。
-- **踩了什么坑**：项目 Hook 必须通过 `/hooks` 人工审阅并信任，修改后当前会话也可能无法热加载，所以保留手动调用作为证据。Windows 的 `conda run` 转发 Unicode pytest 输出偶尔会遇到 GBK 编码问题；验证时可先激活 `myself` 环境后直接调用 PATH 中的 `python`，但仓库配置仍保持可迁移入口。
+- **为什么这么做**：把路径选择与 Hook JSON 决策写成可单测的 Python 逻辑，并让 Hook 和主窗口复用同一个 CLI；失败只请求继续一次，`stop_hook_active=true` 后放行，既能促使代理修正又不会无限循环。Hook 使用通用 `python3` 入口和 Windows `conda run` 覆盖，内部 pytest 则复用 `sys.executable`，路径始终从 git 根目录解析，不把个人绝对路径固化为跨机器方案。
+- **踩了什么坑**：项目 Hook 必须通过 `/hooks` 人工审阅并信任，修改后当前会话也可能无法热加载，所以保留手动调用作为证据。Windows 外层 `conda run` 若再嵌套一层 Conda，并转发 Unicode pytest 输出，可能触发 GBK 编码失败；因此内部命令改为当前解释器直接运行，Hook stdout 的非 ASCII 失败原因也统一转义成 ASCII JSON，同时保留解析后的原文。
