@@ -202,6 +202,61 @@ class ResolutionCandidate(BaseModel):
         return self.score
 
 
+class ResolutionGroup(BaseModel):
+    """Pure, write-ready view of one canonical identity and its mentions.
+
+    ``fallback`` groups intentionally use the source entity id as their
+    canonical id.  This keeps unresolved entities queryable without implying
+    that a review candidate was accepted.
+    """
+
+    canonical_id: str
+    canonical_name: str
+    entity_type: str = ""
+    source_entity_ids: list[str] = Field(default_factory=list)
+    source_document_ids: list[str] = Field(default_factory=list)
+    aliases: list[str] = Field(default_factory=list)
+    mention_chunk_ids: list[str] = Field(default_factory=list)
+    evidence: list[ResolutionEvidence] = Field(default_factory=list)
+    fallback: bool = False
+
+    @model_validator(mode="after")
+    def _validate_group(self) -> "ResolutionGroup":
+        _require_text(self.canonical_id, "canonical_id")
+        _require_text(self.canonical_name, "canonical_name")
+        if not self.source_entity_ids:
+            raise ValueError("resolution group requires source_entity_ids")
+        return self
+
+
+class ResolutionBatch(BaseModel):
+    """Result returned by the extraction-to-resolution integration adapter."""
+
+    candidates: list[ResolutionCandidate] = Field(default_factory=list)
+    groups: list[ResolutionGroup] = Field(default_factory=list)
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @property
+    def resolutions(self) -> list[ResolutionCandidate]:
+        """Compatibility name for callers that use ``resolutions``."""
+
+        return self.candidates
+
+    @property
+    def canonical_groups(self) -> list[ResolutionGroup]:
+        return self.groups
+
+    @property
+    def evidence(self) -> list[ResolutionEvidence]:
+        return [item for group in self.groups for item in group.evidence]
+
+
+# Short aliases make the adapter contract discoverable without coupling
+# callers to a particular noun (batch/result/group).
+ResolutionResult = ResolutionBatch
+CanonicalEntityGroup = ResolutionGroup
+
+
 # Short names keep callers from having to depend on the longer contract names.
 CanonicalEntityRef = CanonicalEntityReference
 EntityAlias = AliasRecord
