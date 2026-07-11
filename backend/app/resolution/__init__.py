@@ -11,6 +11,7 @@ from app.resolution.models import (
     ResolutionMethod,
     ResolutionStatus,
 )
+from app.resolution.resolver import DeterministicResolver, EntityResolver, normalize_name
 
 __all__ = [
     "ResolutionStatus",
@@ -22,4 +23,7 @@ __all__ = [
     "AliasRecord",
     "EntityAlias",
     "ResolutionAlias",
+    "DeterministicResolver",
+    "EntityResolver",
+    "normalize_name",
 ]
