@@ -4,6 +4,7 @@ import pytest
 
 from app.parsing.base import parse_file
 from app.parsing.errors import ParseError
+from app.parsing.models import ContentKind, ExtractionPolicy
 
 
 def test_parse_file_txt(tmp_path):
@@ -20,6 +21,34 @@ def test_parse_file_markdown(tmp_path):
     p.write_text("# 标题\n\n正文内容。", encoding="utf-8")
     doc = parse_file(str(p))
     assert doc.doc_type == "markdown"
+
+
+def test_parse_file_markdown_preserves_code_and_config_chunk_metadata(tmp_path):
+    p = tmp_path / "doc.md"
+    raw = (
+        "# Example\n\n"
+        "A paragraph.\n\n"
+        "```python\nprint('hi')\n```\n\n"
+        "```json\n{\"port\": 8000}\n```\n"
+    )
+    p.write_text(raw, encoding="utf-8")
+
+    doc = parse_file(str(p))
+
+    code_chunks = [c for c in doc.chunks if c.content_kind is ContentKind.CODE]
+    config_chunks = [
+        c for c in doc.chunks if c.content_kind is ContentKind.CONFIG
+    ]
+    assert len(code_chunks) == 1
+    assert code_chunks[0].language == "python"
+    assert code_chunks[0].extraction_policy is ExtractionPolicy.SPECIALIZED
+    assert len(config_chunks) == 1
+    assert config_chunks[0].language == "json"
+    assert config_chunks[0].extraction_policy is ExtractionPolicy.SKIP
+    assert all(
+        doc.raw_text[c.location.char_start : c.location.char_end] == c.text
+        for c in doc.chunks
+    )
 
 
 def test_parse_file_chunk_offsets_traceable(tmp_path):

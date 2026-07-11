@@ -1,16 +1,27 @@
 """chunker 测试：聚合、同页同标题守卫、小块回填、偏移可追溯。"""
 
 from app.parsing.chunker import chunk_blocks, MAX_CHARS, split_oversized_block
-from app.parsing.models import Block
+from app.parsing.models import Block, ContentKind, ExtractionPolicy
 
 
-def _block(text, start, page=None, heading=None):
+def _block(
+    text,
+    start,
+    page=None,
+    heading=None,
+    content_kind=ContentKind.PROSE,
+    language=None,
+    extraction_policy=ExtractionPolicy.NORMAL,
+):
     return Block(
         text=text,
         char_start=start,
         char_end=start + len(text),
         page=page,
         heading_path=heading or [],
+        content_kind=content_kind,
+        language=language,
+        extraction_policy=extraction_policy,
     )
 
 
@@ -46,6 +57,81 @@ def test_different_heading_does_not_merge():
     blocks = [_block("AAA", 0, heading=["X"]), _block("BBB", 5, heading=["Y"])]
     chunks = chunk_blocks(blocks, document_id="d", raw_text=raw)
     assert len(chunks) == 2
+
+
+def test_code_chunk_preserves_source_metadata():
+    raw = "print('hi')"
+    blocks = [
+        _block(
+            raw,
+            0,
+            content_kind=ContentKind.CODE,
+            language="python",
+            extraction_policy=ExtractionPolicy.SPECIALIZED,
+        )
+    ]
+
+    [chunk] = chunk_blocks(blocks, document_id="d", raw_text=raw)
+
+    assert chunk.content_kind is ContentKind.CODE
+    assert chunk.language == "python"
+    assert chunk.extraction_policy is ExtractionPolicy.SPECIALIZED
+
+
+def test_code_and_prose_blocks_with_same_boundary_stay_separate():
+    raw = "print('hi')\n\nA paragraph."
+    blocks = [
+        _block(
+            "print('hi')",
+            0,
+            page=1,
+            heading=["Example"],
+            content_kind=ContentKind.CODE,
+            language="python",
+            extraction_policy=ExtractionPolicy.SPECIALIZED,
+        ),
+        _block(
+            "A paragraph.",
+            13,
+            page=1,
+            heading=["Example"],
+        ),
+    ]
+
+    chunks = chunk_blocks(blocks, document_id="d", raw_text=raw)
+
+    assert len(chunks) == 2
+    assert chunks[0].content_kind is ContentKind.CODE
+    assert chunks[1].content_kind is ContentKind.PROSE
+
+
+def test_config_and_prose_blocks_with_same_boundary_stay_separate():
+    raw = '{"port": 8000}\n\nA paragraph.'
+    blocks = [
+        _block(
+            '{"port": 8000}',
+            0,
+            page=1,
+            heading=["Example"],
+            content_kind=ContentKind.CONFIG,
+            language="json",
+            extraction_policy=ExtractionPolicy.SKIP,
+        ),
+        _block(
+            "A paragraph.",
+            16,
+            page=1,
+            heading=["Example"],
+        ),
+    ]
+
+    chunks = chunk_blocks(blocks, document_id="d", raw_text=raw)
+
+    assert len(chunks) == 2
+    assert chunks[0].content_kind is ContentKind.CONFIG
+    assert chunks[0].language == "json"
+    assert chunks[0].extraction_policy is ExtractionPolicy.SKIP
+    assert chunks[1].content_kind is ContentKind.PROSE
 
 
 def test_chunk_index_is_sequential():

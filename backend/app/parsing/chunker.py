@@ -71,6 +71,9 @@ def split_oversized_block(
                 char_end=block.char_start + cut,
                 page=block.page,
                 heading_path=block.heading_path,
+                content_kind=block.content_kind,
+                language=block.language,
+                extraction_policy=block.extraction_policy,
             )
         )
         if cut >= n:
@@ -90,11 +93,25 @@ def _make_chunk(index: int, group: list[Block], document_id: str, raw_text: str)
         page=group[0].page,
         heading_path=group[0].heading_path,
     )
-    return Chunk(chunk_index=index, text=text, location=loc, char_count=len(text))
+    return Chunk(
+        chunk_index=index,
+        text=text,
+        location=loc,
+        char_count=len(text),
+        content_kind=group[0].content_kind,
+        language=group[0].language,
+        extraction_policy=group[0].extraction_policy,
+    )
 
 
 def _same_boundary(a: Block, b: Block) -> bool:
-    return a.page == b.page and a.heading_path == b.heading_path
+    return (
+        a.page == b.page
+        and a.heading_path == b.heading_path
+        and a.content_kind == b.content_kind
+        and a.language == b.language
+        and a.extraction_policy == b.extraction_policy
+    )
 
 
 def chunk_blocks(
