@@ -22,7 +22,10 @@ from pathlib import Path
 
 # 脚本在 evals/，后端代码在 backend/app/，需把 backend/ 加入 sys.path
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "backend"))
+
+from evals.metrics import split_assertion_sentences  # noqa: E402
 
 from app.clients.graph import close, get_driver, verify_connectivity  # noqa: E402
 from app.config import get_settings  # noqa: E402
@@ -138,7 +141,7 @@ def eval_qa(driver, doc, question: str, gold_keywords: list[str], gold_supportin
     citation_hit_rate = answer_accuracy if has_citation else 0.0
 
     # 幻觉率（半自动）：答案正文按句切分，无角标的句子算"无引用论断"
-    sentences = [s.strip() for s in re.split(r"[。.！!？?\n]+", answer.text) if s.strip()]
+    sentences = split_assertion_sentences(answer.text)
     uncited = [s for s in sentences if not _CITE_RE.search(s)]
     has_refusal = "根据现有资料无法回答" in answer.text
     hallucination_rate = (len(uncited) / len(sentences)) if sentences and not has_refusal else 0.0
