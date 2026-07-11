@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch, ApiError } from '../../api/client'
 import {
   listConversations,
@@ -30,6 +30,7 @@ export function WorkbenchView() {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [convLoading, setConvLoading] = useState(true)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const listRequestGeneration = useRef(0)
 
   // 运行状态（SSE）
   const [chatRunId, setChatRunId] = useState<string | null>(null)
@@ -37,32 +38,35 @@ export function WorkbenchView() {
 
   // 首次进入：加载会话列表（默认不自动选，空态引导「新建会话开始」）。
   const refreshList = useCallback(async () => {
+    const generation = ++listRequestGeneration.current
     setConvLoading(true)
     try {
       const { items } = await listConversations()
+      if (generation !== listRequestGeneration.current) return
       setConversations(items)
     } catch {
+      if (generation !== listRequestGeneration.current) return
       // 拉取失败保持空列表，不抛错扰民（侧边栏会显示空态）
       setConversations([])
     } finally {
-      setConvLoading(false)
+      if (generation === listRequestGeneration.current) setConvLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    let cancelled = false
+    const generation = ++listRequestGeneration.current
     listConversations()
       .then(({ items }) => {
-        if (!cancelled) setConversations(items)
+        if (generation === listRequestGeneration.current) setConversations(items)
       })
       .catch(() => {
-        if (!cancelled) setConversations([])
+        if (generation === listRequestGeneration.current) setConversations([])
       })
       .finally(() => {
-        if (!cancelled) setConvLoading(false)
+        if (generation === listRequestGeneration.current) setConvLoading(false)
       })
     return () => {
-      cancelled = true
+      if (generation === listRequestGeneration.current) listRequestGeneration.current += 1
     }
   }, [])
 
@@ -104,6 +108,8 @@ export function WorkbenchView() {
   async function handleCreate() {
     try {
       const detail = await createConversation()
+      listRequestGeneration.current += 1
+      setConvLoading(false)
       setConversationId(detail.conversationId)
       setMessages([])
       setConversations((prev) => [
@@ -138,6 +144,8 @@ export function WorkbenchView() {
   async function handleRename(id: string, title: string) {
     try {
       const updated = await renameConversation(id, title)
+      listRequestGeneration.current += 1
+      setConvLoading(false)
       setConversations((prev) =>
         prev.map((c) => (c.conversationId === id ? { ...c, title: updated.title } : c)),
       )
@@ -150,6 +158,8 @@ export function WorkbenchView() {
   async function handleDelete(id: string) {
     try {
       await deleteConversation(id)
+      listRequestGeneration.current += 1
+      setConvLoading(false)
       setConversations((prev) => prev.filter((c) => c.conversationId !== id))
       if (id === conversationId) {
         setConversationId(null)
@@ -169,6 +179,8 @@ export function WorkbenchView() {
     // 终态 refreshList 再以后端为准对齐（手动改过名的后端不覆盖，刷新会还原）。
     if (messages.length === 0) {
       const title = question.split(/\s+/).join(' ').slice(0, 20)
+      listRequestGeneration.current += 1
+      setConvLoading(false)
       setConversations((prev) =>
         prev.map((c) =>
           c.conversationId === conversationId && c.title === '新会话' ? { ...c, title } : c,

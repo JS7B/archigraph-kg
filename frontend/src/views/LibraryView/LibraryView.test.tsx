@@ -24,6 +24,14 @@ const document: DocumentMeta = {
   chunkCount: 3,
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 describe('LibraryView terminal flow', () => {
   let onTerminal: ((event: RunEvent) => void) | undefined
 
@@ -96,5 +104,40 @@ describe('LibraryView terminal flow', () => {
     expect(screen.getByText('删除失败')).toBeInTheDocument()
     const listCalls = vi.mocked(apiFetch).mock.calls.filter(([path]) => path === '/api/documents')
     expect(listCalls).toHaveLength(1)
+  })
+
+  it('keeps the newest document list when refresh responses finish out of order', async () => {
+    const firstRefresh = deferred<DocumentMeta[]>()
+    const latestRefresh = deferred<DocumentMeta[]>()
+    let listRequest = 0
+    vi.mocked(apiFetch).mockImplementation((path) => {
+      if (path !== '/api/documents') {
+        return Promise.resolve({ runId: 'run-delete', documentId: document.id })
+      }
+      listRequest += 1
+      if (listRequest === 1) return Promise.resolve([document])
+      if (listRequest === 2) return firstRefresh.promise
+      return latestRefresh.promise
+    })
+    const newest = { ...document, id: 'doc-newest', name: 'newest.md' }
+    const stale = { ...document, id: 'doc-stale', name: 'stale.md' }
+
+    render(<LibraryView />)
+    expect(await screen.findByText('notes.md')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '刷新文档列表' }))
+    fireEvent.click(screen.getByRole('button', { name: '刷新文档列表' }))
+
+    await act(async () => {
+      latestRefresh.resolve([newest])
+      await latestRefresh.promise
+    })
+    expect(screen.getByText('newest.md')).toBeInTheDocument()
+
+    await act(async () => {
+      firstRefresh.resolve([stale])
+      await firstRefresh.promise
+    })
+    expect(screen.getByText('newest.md')).toBeInTheDocument()
+    expect(screen.queryByText('stale.md')).not.toBeInTheDocument()
   })
 })
