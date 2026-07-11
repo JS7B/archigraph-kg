@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-07-11 扩展知识图谱质量 worktree 审计门禁
+
+- 做了什么：为五条 `feat/kg-*` 工作线增加精确路径白名单，并按 parsing、extraction、graph/router 变更选择定向 pytest 门禁。
+- 这是什么：审计门禁是在 Hook 停止前检查工作树范围和验证命令的自动闸门；定向测试只运行受影响的后端板块。
+- 为什么需要：质量重构按 worktree 依赖顺序推进，若没有分支范围检查，误改其他板块会悄悄混入；若每次跑全套集成测试，又会把反馈变慢并依赖 Neo4j。
+- 为什么这么做：沿用已有 `BRANCH_SCOPES` 与 `commands_for_paths`，命令复用 Hook 启动时的 `sys.executable`，保持 Windows/Conda 行为一致。
+- 踩了什么坑：审计测试目录会被后端根 `conftest.py` 的 Neo4j fixture 继承；单独验证 Hook 测试时使用 `--confcutdir=backend/tests/audit`，避免把环境不可用误报为门禁逻辑失败。
+
 ## 2026-06-17 用 Git + GitHub 管理项目，并理清两种「身份」
 
 - **做了什么**：把项目文件夹初始化成 git 仓库（`git init`），写好 `.gitignore`，做第一个提交，再用 `gh` CLI 登录 GitHub 后创建公开远程仓库并推送。
