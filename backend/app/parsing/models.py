@@ -3,7 +3,25 @@
 所有偏移量相对 ParsedDocument.raw_text，左闭右开 [char_start, char_end)。
 """
 
+from enum import Enum
+
 from pydantic import BaseModel, Field
+
+
+class ContentKind(str, Enum):
+    PROSE = "prose"
+    CODE = "code"
+    CONFIG = "config"
+    TABLE = "table"
+    LIST = "list"
+    LOG = "log"
+    HEADING = "heading"
+
+
+class ExtractionPolicy(str, Enum):
+    NORMAL = "normal"
+    SKIP = "skip"
+    SPECIALIZED = "specialized"
 
 
 class SourceLocation(BaseModel):
@@ -24,6 +42,9 @@ class Block(BaseModel):
     char_end: int
     page: int | None = None
     heading_path: list[str] = Field(default_factory=list)
+    content_kind: ContentKind = ContentKind.PROSE
+    language: str | None = None
+    extraction_policy: ExtractionPolicy = ExtractionPolicy.NORMAL
 
 
 class Chunk(BaseModel):
@@ -33,6 +54,9 @@ class Chunk(BaseModel):
     text: str
     location: SourceLocation
     char_count: int
+    content_kind: ContentKind = ContentKind.PROSE
+    language: str | None = None
+    extraction_policy: ExtractionPolicy = ExtractionPolicy.NORMAL
 
 
 class ParsedDocument(BaseModel):
