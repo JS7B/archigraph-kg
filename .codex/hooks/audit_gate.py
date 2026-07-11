@@ -52,6 +52,14 @@ PYTHON_EXTRACTION_COMMAND = [
     "--ignore=backend/tests/extraction/test_writer.py",
     "--ignore=backend/tests/extraction/test_llm_real.py",
 ]
+PYTHON_RESOLUTION_COMMAND = [
+    sys.executable,
+    "-m",
+    "pytest",
+    "tests/resolution",
+    "-q",
+    "--confcutdir=tests/resolution",
+]
 PYTHON_GRAPH_COMMAND = [
     sys.executable,
     "-m",
@@ -171,6 +179,14 @@ def _npm_script_exists(repo: Path, script: str) -> bool:
     return script in data.get("scripts", {})
 
 
+def _command_cwd(command: list[str], repo: Path) -> Path:
+    if command == PYTHON_RESOLUTION_COMMAND:
+        return repo / "backend"
+    if command[0] == NPM_EXECUTABLE:
+        return repo / "frontend"
+    return repo
+
+
 def _is_allowed(path: str, allowed: tuple[str, ...]) -> bool:
     return any(
         path.startswith(item) if item.endswith("/") else path == item
@@ -237,7 +253,7 @@ def audit_repository(
             )
 
     for command in commands_for_paths(paths):
-        cwd = repo / "frontend" if command[0] == NPM_EXECUTABLE else repo
+        cwd = _command_cwd(command, repo)
         try:
             if (
                 command[:2] == [NPM_EXECUTABLE, "run"]
@@ -284,6 +300,12 @@ def commands_for_paths(paths: list[str]) -> list[list[str]]:
         for path in paths
     ):
         commands.append(PYTHON_EXTRACTION_COMMAND)
+    if any(
+        path.startswith("backend/app/resolution/")
+        or path.startswith("backend/tests/resolution/")
+        for path in paths
+    ):
+        commands.append(PYTHON_RESOLUTION_COMMAND)
     if any(
         path.startswith("backend/app/graph/")
         or path.startswith("backend/tests/graph/")

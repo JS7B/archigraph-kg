@@ -87,6 +87,51 @@ def test_extraction_paths_select_targeted_backend_gate():
     ]
 
 
+def test_resolution_paths_select_targeted_backend_gate():
+    expected = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "tests/resolution",
+        "-q",
+        "--confcutdir=tests/resolution",
+    ]
+
+    assert commands_for_paths(["backend/app/resolution/resolver.py"]) == [expected]
+    assert commands_for_paths(["backend/tests/resolution/test_resolver.py"]) == [
+        expected
+    ]
+
+
+def test_resolution_gate_runs_from_backend_directory(tmp_path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    run_git(repo, "switch", "-c", "feat/kg-resolution")
+    commit_path(repo, "backend/app/resolution/resolver.py")
+    calls: list[tuple[list[str], Path]] = []
+
+    def run_command(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+        calls.append((command, cwd))
+        return subprocess.CompletedProcess(command, 0, "passed", "")
+
+    report = audit_repository(repo, run_command=run_command)
+
+    assert report.failures == []
+    assert calls == [
+        (
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "tests/resolution",
+                "-q",
+                "--confcutdir=tests/resolution",
+            ],
+            repo / "backend",
+        )
+    ]
+
+
 def test_graph_and_graph_router_paths_select_targeted_backend_gate():
     expected = [
         sys.executable,
