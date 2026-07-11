@@ -64,3 +64,17 @@ def test_fenced_block_keeps_full_text_offsets_and_metadata(tmp_path):
     assert fenced.heading_path == ["Config"]
     after = [b for b in blocks if b.text == "After."][0]
     assert raw[after.char_start : after.char_end] == "After."
+
+
+def test_unlabeled_fenced_block_is_code_with_traceable_offsets(tmp_path):
+    md = "Before.\n\n```\nx\n```\n\nAfter."
+    p = tmp_path / "unlabeled.md"
+    p.write_text(md, encoding="utf-8")
+
+    raw, blocks = parse_markdown(str(p))
+
+    fenced = [b for b in blocks if b.text == "```\nx\n```"][0]
+    assert fenced.content_kind is ContentKind.CODE
+    assert fenced.language is None
+    assert fenced.extraction_policy is ExtractionPolicy.SPECIALIZED
+    assert raw[fenced.char_start : fenced.char_end] == fenced.text

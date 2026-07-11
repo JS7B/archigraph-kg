@@ -56,3 +56,11 @@ def test_unknown_fence_defaults_to_specialized_code():
         "custom-lang",
         ExtractionPolicy.SPECIALIZED,
     )
+
+
+def test_unlabeled_fence_defaults_to_specialized_code():
+    assert classify_block("opaque content", fenced_language="") == (
+        ContentKind.CODE,
+        None,
+        ExtractionPolicy.SPECIALIZED,
+    )

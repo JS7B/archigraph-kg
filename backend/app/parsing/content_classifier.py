@@ -22,7 +22,8 @@ def classify_block(
     to lowercase and only the first info-string token is retained by callers.
     """
     if fenced_language is not None:
-        language = fenced_language.strip().split(maxsplit=1)[0].lower() or None
+        tokens = fenced_language.strip().split(maxsplit=1)
+        language = tokens[0].lower() if tokens else None
         if language in _CONFIG_LANGUAGES:
             return ContentKind.CONFIG, language, ExtractionPolicy.SKIP
         return ContentKind.CODE, language, ExtractionPolicy.SPECIALIZED
