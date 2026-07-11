@@ -161,4 +161,3 @@ Markdown 使用 AST 或等价的结构解析；至少识别代码围栏、表格
 - LightRAG：多种切块、角色化模型、来源限制和增量管理。
 - OpenSPG/KAG：布局分析、属性标准化、语义对齐、知识块双向索引。
 - Graphiti：episode provenance、事实失效和混合检索的后续借鉴方向。
-
