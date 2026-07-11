@@ -9,11 +9,17 @@ from pathlib import Path
 from typing import Callable
 
 
+def npm_executable(platform: str | None = None) -> str:
+    platform = sys.platform if platform is None else platform
+    return "npm.cmd" if platform == "win32" else "npm"
+
+
+NPM_EXECUTABLE = npm_executable()
 FRONTEND_COMMANDS = [
-    ["npm", "run", "lint"],
-    ["npm", "run", "typecheck"],
-    ["npm", "run", "test:run"],
-    ["npm", "run", "build"],
+    [NPM_EXECUTABLE, "run", "lint"],
+    [NPM_EXECUTABLE, "run", "typecheck"],
+    [NPM_EXECUTABLE, "run", "test:run"],
+    [NPM_EXECUTABLE, "run", "build"],
 ]
 EVAL_COMMANDS = [
     [sys.executable, "-m", "pytest", "evals/tests", "-q"],
@@ -172,10 +178,10 @@ def audit_repository(
             )
 
     for command in commands_for_paths(paths):
-        cwd = repo / "frontend" if command[0] == "npm" else repo
+        cwd = repo / "frontend" if command[0] == NPM_EXECUTABLE else repo
         try:
             if (
-                command[:2] == ["npm", "run"]
+                command[:2] == [NPM_EXECUTABLE, "run"]
                 and report.branch != "feat/frontend-quality"
             ):
                 script = command[2]
