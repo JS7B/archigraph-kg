@@ -20,6 +20,7 @@ import type {
   Citation,
   Conversation,
   ConversationMessage,
+  RunEvent,
 } from '../../types'
 import styles from './WorkbenchView.module.css'
 
@@ -32,7 +33,6 @@ export function WorkbenchView() {
 
   // 运行状态（SSE）
   const [chatRunId, setChatRunId] = useState<string | null>(null)
-  const { events, currentStage, error } = useRunEvents(chatRunId)
   const [activeChunkId, setActiveChunkId] = useState<string | null>(null)
 
   // 首次进入：加载会话列表（默认不自动选，空态引导「新建会话开始」）。
@@ -50,8 +50,21 @@ export function WorkbenchView() {
   }, [])
 
   useEffect(() => {
-    void refreshList()
-  }, [refreshList])
+    let cancelled = false
+    listConversations()
+      .then(({ items }) => {
+        if (!cancelled) setConversations(items)
+      })
+      .catch(() => {
+        if (!cancelled) setConversations([])
+      })
+      .finally(() => {
+        if (!cancelled) setConvLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // ConversationMessage → ChatMessage 转换（让历史回灌复用现有渲染/角标逻辑）。
   const toChatMessages = useCallback((list: ConversationMessage[]): ChatMessage[] => {
@@ -66,29 +79,26 @@ export function WorkbenchView() {
     }))
   }, [])
 
-  // 终态事件到达后，把答案/错误落成一条 agent 消息，并结束本次 Run 订阅。
-  // 关键：只清 chatRunId 解除 busy，不清 conversationId（会话要保留供追问）。
-  useEffect(() => {
-    if (!chatRunId) return
-    const last = events[events.length - 1]
-    if (!last) return
-
-    if (last.status === 'succeeded' && last.answer) {
+  const handleTerminal = useCallback((event: RunEvent) => {
+    if (event.status === 'succeeded' && event.answer) {
       setMessages((prev) => [
         ...prev,
-        { id: `a-${last.timestampMs}`, role: 'agent', text: last.answer!.text, answer: last.answer! },
+        { id: `a-${event.timestampMs}`, role: 'agent', text: event.answer!.text, answer: event.answer! },
       ])
       setChatRunId(null)
       // 终态后刷新侧边栏（messageCount/title 更新）
       void refreshList()
-    } else if (last.status === 'failed') {
+    } else if (event.status === 'failed') {
       setMessages((prev) => [
         ...prev,
-        { id: `a-${last.timestampMs}`, role: 'agent', text: `回答失败：${last.message}` },
+        { id: `a-${event.timestampMs}`, role: 'agent', text: `回答失败：${event.message}` },
       ])
       setChatRunId(null)
     }
-  }, [events, chatRunId, refreshList])
+  }, [refreshList])
+
+  // 关键：只清 chatRunId 解除 busy，不清 conversationId（会话要保留供追问）。
+  const { events, currentStage, error } = useRunEvents(chatRunId, { onTerminal: handleTerminal })
 
   // 新建会话：拿到 id → 设为当前 → 清空 messages → 侧边栏 unshift。
   async function handleCreate() {

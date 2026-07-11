@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useState } from 'react'
 import { subscribeRunEvents } from '../api/sse'
 import type { RunEvent, Stage } from '../types'
 
@@ -19,9 +19,7 @@ export function useRunEvents(runId: string | null, options: UseRunEventsOptions 
   const [currentStage, setCurrentStage] = useState<Stage>('idle')
   const [error, setError] = useState<string | null>(null)
   const [prevRunId, setPrevRunId] = useState(runId)
-  const onTerminalRef = useRef(options.onTerminal)
-  const handledTerminalRef = useRef(false)
-  onTerminalRef.current = options.onTerminal
+  const notifyTerminal = useEffectEvent((event: RunEvent) => options.onTerminal?.(event))
 
   // runId 一变（含变回 null）立即在渲染期清空事件，而非等 effect。否则 Run 结束
   // （runId→null）时旧终态事件会滞留在 events 里；下个 Run 起（null→newId）触发消费方的
@@ -32,20 +30,20 @@ export function useRunEvents(runId: string | null, options: UseRunEventsOptions 
     setEvents([])
     setCurrentStage('idle')
     setError(null)
-    handledTerminalRef.current = false
   }
 
   useEffect(() => {
     if (!runId) return
+    let handledTerminal = false
 
     const unsubscribe = subscribeRunEvents(
       runId,
       (event) => {
         setEvents((prev) => [...prev, event])
         setCurrentStage(event.stage)
-        if (TERMINAL.has(event.status) && !handledTerminalRef.current) {
-          handledTerminalRef.current = true
-          onTerminalRef.current?.(event)
+        if (TERMINAL.has(event.status) && !handledTerminal) {
+          handledTerminal = true
+          notifyTerminal(event)
         }
       },
       () => setError('SSE 连接中断，请确认后端正在运行，稍后重新提问重试'),
