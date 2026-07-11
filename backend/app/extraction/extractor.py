@@ -9,7 +9,7 @@ from collections.abc import Callable
 from app.extraction.errors import ExtractionError
 from app.extraction.llm_extract import extract_chunk
 from app.extraction.models import ChunkExtraction, ExtractionFailure
-from app.parsing.models import ParsedDocument
+from app.parsing.models import ExtractionPolicy, ParsedDocument
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +33,15 @@ def extract_document(
         if on_progress is not None:
             on_progress(index, total)
         chunk_id = f"{doc.document_id}#{chunk.chunk_index}"
+        if chunk.extraction_policy is ExtractionPolicy.SKIP:
+            continue
         try:
-            result = extract_chunk(chunk_id, chunk.text, max_attempts=max_attempts)
+            kwargs = {"max_attempts": max_attempts}
+            if chunk.extraction_policy is not ExtractionPolicy.NORMAL:
+                kwargs["extraction_policy"] = chunk.extraction_policy
+            if chunk.language is not None:
+                kwargs["language"] = chunk.language
+            result = extract_chunk(chunk_id, chunk.text, **kwargs)
             extractions.append(ChunkExtraction(chunk_id=chunk_id, result=result))
         except ExtractionError as exc:
             logger.error("跳过抽取失败的 chunk %s: %s", chunk_id, exc)

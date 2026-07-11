@@ -5,6 +5,8 @@ json_object 模式要求 prompt 文本出现 "json" 字样，system 与 user 均
 从源头压噪、提召回（技术栈列举漏抽是主要失分点）。JSON 输出结构不变，下游模型不动。
 """
 
+from app.parsing.models import ExtractionPolicy
+
 # 封闭实体类型集合：不属于任何一类则不抽取（禁止模型自拟新类型）。
 ENTITY_TYPES = "人物、机构、项目、技术、概念、产品模块、指标、需求项、风险点"
 
@@ -34,16 +36,33 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_messages(chunk_text: str) -> list[dict]:
+def build_messages(
+    chunk_text: str,
+    *,
+    extraction_policy: ExtractionPolicy | str = ExtractionPolicy.NORMAL,
+    language: str | None = None,
+) -> list[dict]:
     """构造单个 chunk 的抽取消息（system + user）。"""
+    try:
+        policy = ExtractionPolicy(extraction_policy)
+    except ValueError:
+        policy = ExtractionPolicy.NORMAL
+    system = SYSTEM_PROMPT
+    if policy is ExtractionPolicy.SPECIALIZED:
+        system += (
+            "\nThis is a code/config specialized chunk. Extract only explicitly named "
+            "libraries, frameworks, languages, tools, or components. Reject generic "
+            "syntax, paths, log lines, punctuation, symbols, and variable names as entities."
+        )
+    language_hint = f"\nDetected language: {language}" if language else ""
     user = (
         "请从下面的文本片段抽取实体与关系，并以 JSON 对象返回，"
         '形如 {"entities": [{"name":"...","type":"...","description":"..."}], '
         '"relations": [{"source":"...","target":"...","type":"...","confidence":0.8}]}。\n'
         "relations 的 source/target 必须是 entities 中出现过的 name。\n\n"
-        f"文本片段：\n{chunk_text}"
+        f"文本片段：\n{chunk_text}{language_hint}"
     )
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system},
         {"role": "user", "content": user},
     ]

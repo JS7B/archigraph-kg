@@ -40,3 +40,22 @@ def test_raises_after_exhausting_attempts(monkeypatch):
         llm_extract.extract_chunk("d#3", "文本", max_attempts=2)
     assert exc_info.value.chunk_id == "d#3"
     assert exc_info.value.reason
+
+
+def test_rejects_missing_output_fields_and_retries(monkeypatch):
+    calls = {"n": 0}
+
+    def fake_chat(messages, **kwargs):
+        calls["n"] += 1
+        return "{}"
+
+    monkeypatch.setattr(llm_extract.llm, "chat", fake_chat)
+    with pytest.raises(ExtractionError):
+        llm_extract.extract_chunk("d#4", "文本", max_attempts=2)
+    assert calls["n"] == 2
+
+
+def test_rejects_non_string_json_response(monkeypatch):
+    monkeypatch.setattr(llm_extract.llm, "chat", lambda messages, **kwargs: [])
+    with pytest.raises(ExtractionError):
+        llm_extract.extract_chunk("d#5", "文本", max_attempts=1)
