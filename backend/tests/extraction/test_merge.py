@@ -222,6 +222,10 @@ def test_relation_dedup_keeps_high_confidence_evidence_chunk():
         ExtractedEntity(name="A", type="项目", evidence=_ev("d#0")),
         ExtractedEntity(name="B", type="项目", evidence=_ev("d#0")),
     ]
+    entities_second = [
+        ExtractedEntity(name="A", type="项目", evidence=_ev("d#1")),
+        ExtractedEntity(name="B", type="项目", evidence=_ev("d#1")),
+    ]
     low = ExtractedRelation(
         source="A",
         target="B",
@@ -239,9 +243,73 @@ def test_relation_dedup_keeps_high_confidence_evidence_chunk():
 
     result = merge_extractions(
         "d",
-        [_ce("d#0", entities, [low]), _ce("d#1", entities, [high])],
+        [_ce("d#0", entities, [low]), _ce("d#1", entities_second, [high])],
     )
 
     assert len(result.relations) == 1
     assert result.relations[0].confidence == 0.9
     assert result.relations[0].evidence_chunk_id == "d#1"
+
+
+def test_entity_with_cross_chunk_evidence_is_rejected_with_diagnostic():
+    extraction = _ce(
+        "d#0",
+        entities=[
+            ExtractedEntity(name="FastAPI", type="技术", evidence=_ev("d#other"))
+        ],
+        hydrate_evidence=False,
+    )
+    diagnostics: list[str] = []
+
+    result = merge_extractions("d", [extraction], diagnostics=diagnostics)
+
+    assert result.entities == []
+    assert any("evidence" in message for message in diagnostics)
+
+
+def test_relation_with_cross_chunk_evidence_is_rejected_with_diagnostic():
+    entities = [
+        ExtractedEntity(name="A", type="项目", evidence=_ev("d#0")),
+        ExtractedEntity(name="B", type="项目", evidence=_ev("d#0")),
+    ]
+    relation = ExtractedRelation(
+        source="A",
+        target="B",
+        type="依赖",
+        confidence=0.9,
+        evidence=_ev("d#other"),
+    )
+    diagnostics: list[str] = []
+
+    result = merge_extractions(
+        "d", [_ce("d#0", entities, [relation], hydrate_evidence=False)], diagnostics=diagnostics
+    )
+
+    assert result.relations == []
+    assert any("evidence" in message for message in diagnostics)
+
+
+def test_relation_cannot_connect_entities_from_different_chunks():
+    first = _ce(
+        "d#0",
+        entities=[ExtractedEntity(name="A", type="项目", evidence=_ev("d#0"))],
+        hydrate_evidence=False,
+    )
+    second = _ce(
+        "d#1",
+        entities=[ExtractedEntity(name="B", type="项目", evidence=_ev("d#1"))],
+        relations=[
+            ExtractedRelation(
+                source="A",
+                target="B",
+                type="依赖",
+                confidence=0.9,
+                evidence=_ev("d#1"),
+            )
+        ],
+        hydrate_evidence=False,
+    )
+
+    result = merge_extractions("d", [first, second])
+
+    assert result.relations == []

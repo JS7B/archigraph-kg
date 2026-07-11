@@ -42,7 +42,7 @@ def merge_extractions(
 ) -> DocumentExtraction:
     """把逐 chunk 抽取结果合并为文档级实体与关系。"""
     entities: dict[str, MergedEntity] = {}
-    accepted_entities: list[ExtractedEntity] = []
+    accepted_entities_by_chunk: dict[str, list[ExtractedEntity]] = {}
     # 归一名 -> 各 type 的出现计数，用于 type 多数决（并列取先见，靠 Counter 插入序）
     type_counts: dict[str, Counter] = {}
 
@@ -63,7 +63,14 @@ def merge_extractions(
             if validation.status.value != "accepted":
                 _report(chunk_id, "entity", validation.diagnostics)
                 continue
-            accepted_entities.append(ent)
+            if ent.evidence is None or ent.evidence.chunk_id != chunk_id:
+                _report(
+                    chunk_id,
+                    "entity",
+                    ["evidence: chunk_id must match extraction chunk"],
+                )
+                continue
+            accepted_entities_by_chunk.setdefault(chunk_id, []).append(ent)
             norm = _normalize(ent.name)
             type_counts.setdefault(norm, Counter())[ent.type] += 1
             if norm not in entities:
@@ -96,9 +103,18 @@ def merge_extractions(
     for extraction in extractions:
         chunk_id = extraction.chunk_id
         for rel in extraction.result.relations:
-            validation = validate_relation_candidate(rel, accepted_entities)
+            validation = validate_relation_candidate(
+                rel, accepted_entities_by_chunk.get(chunk_id, [])
+            )
             if validation.status.value != "accepted":
                 _report(chunk_id, "relation", validation.diagnostics)
+                continue
+            if rel.evidence is None or rel.evidence.chunk_id != chunk_id:
+                _report(
+                    chunk_id,
+                    "relation",
+                    ["evidence: chunk_id must match extraction chunk"],
+                )
                 continue
             relation_type = rel.type.strip()
             relation_diagnostics: list[str] = []

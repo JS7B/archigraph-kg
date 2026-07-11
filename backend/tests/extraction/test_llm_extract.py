@@ -59,3 +59,18 @@ def test_rejects_non_string_json_response(monkeypatch):
     monkeypatch.setattr(llm_extract.llm, "chat", lambda messages, **kwargs: [])
     with pytest.raises(ExtractionError):
         llm_extract.extract_chunk("d#5", "文本", max_attempts=1)
+
+
+def test_extract_chunk_passes_chunk_id_to_prompt(monkeypatch):
+    captured = {}
+
+    def fake_build_messages(text, **kwargs):
+        captured.update(kwargs)
+        return [{"role": "user", "content": text}]
+
+    monkeypatch.setattr(llm_extract, "build_messages", fake_build_messages)
+    monkeypatch.setattr(llm_extract.llm, "chat", lambda messages, **kwargs: _GOOD)
+
+    llm_extract.extract_chunk("d#6", "文本")
+
+    assert captured["chunk_id"] == "d#6"
