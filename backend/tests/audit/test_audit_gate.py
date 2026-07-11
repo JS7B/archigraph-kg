@@ -201,3 +201,21 @@ def test_cli_blocks_once_for_failed_feature_repo(tmp_path):
 
     assert json.loads(blocked.stdout)["decision"] == "block"
     assert json.loads(allowed.stdout) == {"continue": True}
+
+
+def test_stop_hooks_use_one_cross_platform_command_handler_each():
+    config = json.loads((REPO_ROOT / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+
+    assert set(config["hooks"]) == {"Stop", "SubagentStop"}
+    for event in ("Stop", "SubagentStop"):
+        groups = config["hooks"][event]
+        assert len(groups) == 1
+        handlers = groups[0]["hooks"]
+        assert len(handlers) == 1
+        handler = handlers[0]
+        assert handler["type"] == "command"
+        assert handler["timeout"] >= 180
+        assert "python3" in handler["command"]
+        assert "git rev-parse --show-toplevel" in handler["command"]
+        assert "conda run -n myself python" in handler["commandWindows"]
+        assert "git rev-parse --show-toplevel" in handler["commandWindows"]

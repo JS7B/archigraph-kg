@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'repo=$(git rev-parse --show-toplevel) && python3 \"$repo/.codex/hooks/audit_gate.py\" --repo \"$repo\"'",
+            "commandWindows": "powershell -NoProfile -Command \"$repo = git rev-parse --show-toplevel; conda run -n myself python (Join-Path $repo '.codex/hooks/audit_gate.py') --repo $repo\"",
+            "timeout": 600,
+            "statusMessage": "Auditing feature branch before subagent stop"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'repo=$(git rev-parse --show-toplevel) && python3 \"$repo/.codex/hooks/audit_gate.py\" --repo \"$repo\"'",
+            "commandWindows": "powershell -NoProfile -Command \"$repo = git rev-parse --show-toplevel; conda run -n myself python (Join-Path $repo '.codex/hooks/audit_gate.py') --repo $repo\"",
+            "timeout": 600,
+            "statusMessage": "Auditing feature branch before stop"
+          }
+        ]
+      }
+    ]
+  }
+}
