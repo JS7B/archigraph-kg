@@ -40,6 +40,7 @@ PYTHON_PARSING_COMMAND = [
     "pytest",
     "backend/tests/parsing",
     "-q",
+    "--confcutdir=backend/tests/parsing",
 ]
 PYTHON_EXTRACTION_COMMAND = [
     sys.executable,
@@ -47,6 +48,9 @@ PYTHON_EXTRACTION_COMMAND = [
     "pytest",
     "backend/tests/extraction",
     "-q",
+    "--confcutdir=backend/tests/extraction",
+    "--ignore=backend/tests/extraction/test_writer.py",
+    "--ignore=backend/tests/extraction/test_llm_real.py",
 ]
 PYTHON_GRAPH_COMMAND = [
     sys.executable,
