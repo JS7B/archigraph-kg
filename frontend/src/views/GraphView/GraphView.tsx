@@ -6,6 +6,7 @@ import { Button, Card, Chip, DataValue, Eyebrow, Panel } from '../../components/
 import { ApiError } from '../../api/client'
 import { fetchCommunities, fetchGraph, fetchSubgraph } from '../../api/graph'
 import type { GraphCommunity, GraphData, GraphEdge, GraphNode } from '../../types'
+import { edgeConfidenceClass, fallbackPosition, nodeVisualClasses } from './graphVisuals'
 import styles from './GraphView.module.css'
 
 // 注册 fcose 布局（大图布局质量明显优于内置 cose）。模块级注册一次即可。
@@ -53,6 +54,14 @@ function getNodeRelations(graph: GraphData, nodeId: string): NodeRelation[] {
     }
     return relations
   }, [])
+}
+
+function edgeDocumentId(edge: GraphEdge, graph: GraphData): string | null {
+  const source = findGraphNode(graph, edge.source)?.documentId
+  const target = findGraphNode(graph, edge.target)?.documentId
+  if (source) return source
+  if (target) return target
+  return edge.evidenceChunkId?.split('#')[0] || null
 }
 
 const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
@@ -104,6 +113,67 @@ const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
       'text-rotation': 'autorotate',
       'overlay-opacity': 0,
     },
+  },
+  {
+    selector: 'node.type-library',
+    style: { 'background-color': '#0f766e' },
+  },
+  {
+    selector: 'node.type-person',
+    style: { 'background-color': '#b45309' },
+  },
+  {
+    selector: 'node.type-organization',
+    style: { 'background-color': '#0369a1' },
+  },
+  {
+    selector: 'node.type-unknown',
+    style: { 'background-color': '#64748b' },
+  },
+  {
+    selector: 'node.community-local',
+    style: { 'border-color': '#c7d2fe' },
+  },
+  {
+    selector: 'node.community-unknown',
+    style: { 'border-color': '#cbd5e1' },
+  },
+  {
+    selector: 'node.community-palette-0',
+    style: { 'border-color': '#c7d2fe' },
+  },
+  {
+    selector: 'node.community-palette-1',
+    style: { 'border-color': '#99f6e4' },
+  },
+  {
+    selector: 'node.community-palette-2',
+    style: { 'border-color': '#fed7aa' },
+  },
+  {
+    selector: 'node.community-palette-3',
+    style: { 'border-color': '#bae6fd' },
+  },
+  {
+    selector: 'edge.confidence-high',
+    style: { width: 3, 'line-color': '#16a34a', 'target-arrow-color': '#16a34a' },
+  },
+  {
+    selector: 'edge.confidence-medium',
+    style: { width: 2, 'line-color': '#d97706', 'target-arrow-color': '#d97706' },
+  },
+  {
+    selector: 'edge.confidence-low',
+    style: {
+      width: 1,
+      'line-color': '#94a3b8',
+      'target-arrow-color': '#94a3b8',
+      'line-style': 'dashed',
+    },
+  },
+  {
+    selector: 'edge.confidence-unknown',
+    style: { width: 1, 'line-color': '#cbd5e1', 'target-arrow-color': '#cbd5e1' },
   },
   // 度数分档：孤立=灰小（噪声观感）→ 高度数=深大（核心突出）。颜色为靛紫由浅到深。
   {
@@ -173,6 +243,8 @@ const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
 export function GraphView() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const cyRef = useRef<cytoscape.Core | null>(null)
+  const layoutPositionsRef = useRef(new Map<string, { x: number; y: number }>())
+  const entityButtonRefs = useRef(new Map<string, HTMLButtonElement>())
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [communities, setCommunities] = useState<GraphCommunity[]>([])
   const [selectedCommunity, setSelectedCommunity] = useState<GraphCommunity | null>(null)
@@ -183,6 +255,7 @@ export function GraphView() {
   const [subgraphError, setSubgraphError] = useState<string | null>(null)
   const [usingFallback, setUsingFallback] = useState(false)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
+  const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   // 隐藏孤立节点（度数为 0），默认开：孤立点是噪声观感主源，一键切回全貌。不持久化。
   const [hideIsolated, setHideIsolated] = useState(true)
@@ -204,7 +277,7 @@ export function GraphView() {
         setSubgraphLoading(false)
       }
     },
-    [],
+    [setCenterNodeId, setGraphData, setSelectedCommunity, setSelectedNode, setSubgraphError, setSubgraphLoading],
   )
 
   // Prefer bounded community/local data, but retain the existing entities API as a fallback.
@@ -253,17 +326,26 @@ export function GraphView() {
     const visibleNodes = hideIsolated ? withDegree.filter(({ degree }) => degree > 0) : withDegree
     const visibleIds = new Set(visibleNodes.map(({ node }) => node.id))
     return [
-      ...visibleNodes.map(({ node, degree }) => ({
+      // eslint-disable-next-line react-hooks/refs
+      ...visibleNodes.map(({ node, degree }, index) => ({
         data: { id: node.id, label: node.label, degree },
-        classes: `deg-${degreeTier(degree)}`,
+        position: layoutPositionsRef.current.get(node.id) ?? fallbackPosition(node.id, index),
+        classes: `deg-${degreeTier(degree)} ${nodeVisualClasses(node, selectedCommunity?.id)}`,
       })),
       ...graphData.edges
         .filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
         .map((edge) => ({
-          data: { id: edge.id, source: edge.source, target: edge.target, label: edge.relationType },
+          data: {
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            label: edge.relationType,
+            confidence: edge.confidence,
+          },
+          classes: edgeConfidenceClass(edge.confidence),
         })),
     ]
-  }, [graphData, hideIsolated])
+  }, [graphData, hideIsolated, selectedCommunity])
 
   // 实体列表按度数降序（核心实体置顶）；带度数供列表展示。列表始终含全部节点
   // （键盘可达路径不因隐藏孤立点而丢失，孤立点自然沉到列表末尾）。
@@ -278,10 +360,19 @@ export function GraphView() {
     () => (selectedNode && graphData ? getNodeRelations(graphData, selectedNode.id) : []),
     [selectedNode, graphData],
   )
+  const selectedGraphData = graphData ?? { nodes: [], edges: [] }
+
+  useEffect(() => {
+    if (!selectedNode) return
+    entityButtonRefs.current.get(selectedNode.id)?.focus()
+  }, [selectedNode])
 
   // Cytoscape 实例：依赖 graphData，数据到位（或变化）后（重新）构建。
   useEffect(() => {
     if (!containerRef.current || !graphData) return
+
+    const positions = layoutPositionsRef.current
+    const hasStablePositions = positions.size > 0
 
     const cy = cytoscape({
       container: containerRef.current,
@@ -291,7 +382,7 @@ export function GraphView() {
         name: 'fcose',
         quality: 'proof',
         animate: false,
-        randomize: true,
+        randomize: !hasStablePositions,
         fit: true,
         padding: 48,
         nodeSeparation: 120,
@@ -310,9 +401,24 @@ export function GraphView() {
 
     cyRef.current = cy
 
+    cy.nodes().forEach((node) => {
+      const position = node.position()
+      if (Number.isFinite(position.x) && Number.isFinite(position.y)) {
+        positions.set(node.id(), position)
+      }
+    })
+
     cy.on('tap', 'node', (event) => {
       const nodeId = event.target.id()
       setSelectedNode(findGraphNode(graphData, nodeId))
+      setSelectedEdge(null)
+    })
+
+    cy.on('tap', 'edge', (event) => {
+      const edgeId = event.target.id()
+      const edge = graphData.edges.find((candidate) => candidate.id === edgeId) ?? null
+      setSelectedEdge(edge)
+      if (edge) setSelectedNode(findGraphNode(graphData, edge.source))
     })
 
     cy.on('tap', (event) => {
@@ -320,6 +426,12 @@ export function GraphView() {
     })
 
     return () => {
+      cy.nodes().forEach((node) => {
+        const position = node.position()
+        if (Number.isFinite(position.x) && Number.isFinite(position.y)) {
+          positions.set(node.id(), position)
+        }
+      })
       cy.destroy()
       cyRef.current = null
     }
@@ -472,6 +584,33 @@ export function GraphView() {
             </div>
           )}
           {usingFallback && <span className={styles.searchHint}>社区接口暂不可用，已显示实体列表。</span>}
+          {rankedNodes.length > 0 && (
+            <div aria-label="entities">
+              <span className={styles.searchCaption}>Entities</span>
+              <ul className={styles.entityList}>
+                {rankedNodes.map(({ node, degree }) => (
+                  <li key={node.id}>
+                    <button
+                      type="button"
+                      className={styles.entityListBtn}
+                      ref={(element) => {
+                        if (element) entityButtonRefs.current.set(node.id, element)
+                        else entityButtonRefs.current.delete(node.id)
+                      }}
+                      aria-current={selectedNode?.id === node.id ? 'true' : undefined}
+                      onClick={() => setSelectedNode(node)}
+                    >
+                      <span className={styles.entityListLabel}>{node.label}</span>
+                      <span className={styles.entityListMeta}>
+                        <Chip tone="accent">{node.entityType}</Chip>
+                        <span className={styles.entityDegree}>{degree}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <label className={styles.toggleRow}>
             <input
               type="checkbox"
@@ -514,7 +653,25 @@ export function GraphView() {
                             {direction === 'outgoing' ? 'out' : 'in'}
                           </span>
                         </div>
-                        <span className={styles.relationTarget}>{otherNode.label}</span>
+                        <button
+                          type="button"
+                          className={styles.relationTargetButton}
+                          aria-pressed={selectedEdge?.id === edge.id}
+                          onClick={() => setSelectedEdge(edge)}
+                        >
+                          <span className={styles.relationTarget}>{otherNode.label}</span>
+                        </button>
+                        <div className={styles.evidenceDetail} aria-label="relation evidence">
+                          <DataValue label="confidence">
+                            {typeof edge.confidence === 'number' ? edge.confidence.toFixed(2) : 'Unknown'}
+                          </DataValue>
+                          <DataValue label="evidence chunk">
+                            {edge.evidenceChunkId ?? <span className={styles.missingEvidence}>Missing evidence</span>}
+                          </DataValue>
+                          <DataValue label="document">
+                            {edgeDocumentId(edge, selectedGraphData) ?? <span className={styles.missingEvidence}>Missing document</span>}
+                          </DataValue>
+                        </div>
                       </li>
                     ))}
                   </ul>
