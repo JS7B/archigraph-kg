@@ -39,7 +39,8 @@ class ResolutionEvidence(BaseModel):
     source_chunk_id: str = Field(
         validation_alias=AliasChoices("source_chunk_id", "chunk_id")
     )
-    canonical_id: str = Field(
+    canonical_id: str | None = Field(
+        default=None,
         validation_alias=AliasChoices(
             "canonical_id", "target_canonical_id", "canonical_entity_id"
         )
@@ -58,7 +59,8 @@ class ResolutionEvidence(BaseModel):
         _require_text(self.source_entity_id, "source_entity_id")
         _require_text(self.source_document_id, "source_document_id")
         _require_text(self.source_chunk_id, "source_chunk_id")
-        _require_text(self.canonical_id, "canonical_id")
+        if self.canonical_id is not None:
+            _require_text(self.canonical_id, "canonical_id")
         _require_text(self.reason, "reason")
         return self
 
@@ -172,6 +174,20 @@ class ResolutionCandidate(BaseModel):
                 raise ValueError(
                     "accepted evidence must match candidate provenance and canonical_id"
                 )
+            if self.evidence.method is not self.method or self.evidence.score != self.score:
+                raise ValueError("accepted evidence must match candidate method and score")
+        elif self.status is ResolutionStatus.REVIEW:
+            if self.evidence is None:
+                raise ValueError("review resolution requires evidence")
+            if (
+                self.evidence.source_entity_id != self.source_entity_id
+                or self.evidence.source_document_id != self.source_document_id
+                or self.evidence.source_chunk_id != self.source_chunk_id
+                or self.evidence.canonical_id != self.canonical_id
+                or self.evidence.method is not self.method
+                or self.evidence.score != self.score
+            ):
+                raise ValueError("review evidence must match candidate provenance, target, method, and score")
         elif self.status is ResolutionStatus.UNRESOLVED:
             if self.canonical_id is not None or self.evidence is not None:
                 raise ValueError(

@@ -102,7 +102,6 @@ def test_unresolved_candidate_cannot_carry_target_or_evidence():
             source_chunk_id="chunk-9",
             canonical_id="canonical:unknown",
         )
-
     with pytest.raises(ValidationError):
         ResolutionCandidate(
             source_entity_id="doc-1::unknown",
@@ -112,6 +111,30 @@ def test_unresolved_candidate_cannot_carry_target_or_evidence():
             evidence=_evidence(canonical_id="canonical:unknown"),
         )
 
+
+def test_review_candidate_may_carry_targetless_consistent_evidence():
+    evidence = _evidence(
+        source_entity_id="doc-1::graph",
+        canonical_id=None,
+        method=ResolutionMethod.FUZZY,
+        score=0.8,
+        reason="ambiguous candidates require review",
+    )
+    candidate = ResolutionCandidate(
+        source_entity_id="doc-1::graph",
+        source_name="Graph",
+        source_document_id="doc-1",
+        source_chunk_id="chunk-1",
+        status=ResolutionStatus.REVIEW,
+        method=ResolutionMethod.FUZZY,
+        score=0.8,
+        evidence=evidence,
+        reason=evidence.reason,
+    )
+
+    assert candidate.canonical_id is None
+    assert candidate.evidence is not None
+    assert candidate.evidence.canonical_id is None
 
 def test_contract_models_serialize_provenance_and_enums():
     canonical = CanonicalEntityReference(
