@@ -2,7 +2,14 @@
 
 from app.parsing.base import parse_file
 from app.parsing.errors import ParseError
-from app.parsing.models import Block, Chunk, ParsedDocument, SourceLocation
+from app.parsing.models import (
+    Block,
+    Chunk,
+    ContentKind,
+    ExtractionPolicy,
+    ParsedDocument,
+    SourceLocation,
+)
 from app.parsing.repo_importer import parse_directory
 
 __all__ = [
@@ -13,4 +20,6 @@ __all__ = [
     "Chunk",
     "Block",
     "SourceLocation",
+    "ContentKind",
+    "ExtractionPolicy",
 ]
