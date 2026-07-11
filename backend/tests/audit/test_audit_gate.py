@@ -61,13 +61,29 @@ def test_frontend_paths_select_all_frontend_gates():
 
 def test_parsing_paths_select_targeted_backend_gate():
     assert commands_for_paths(["backend/app/parsing/models.py"]) == [
-        [sys.executable, "-m", "pytest", "backend/tests/parsing", "-q"]
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "backend/tests/parsing",
+            "-q",
+            "--confcutdir=backend/tests/parsing",
+        ]
     ]
 
 
 def test_extraction_paths_select_targeted_backend_gate():
     assert commands_for_paths(["backend/app/extraction/models.py"]) == [
-        [sys.executable, "-m", "pytest", "backend/tests/extraction", "-q"]
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "backend/tests/extraction",
+            "-q",
+            "--confcutdir=backend/tests/extraction",
+            "--ignore=backend/tests/extraction/test_writer.py",
+            "--ignore=backend/tests/extraction/test_llm_real.py",
+        ]
     ]
 
 
@@ -98,8 +114,24 @@ def test_targeted_backend_gates_are_deduplicated_for_mixed_paths():
     )
 
     assert commands == [
-        [sys.executable, "-m", "pytest", "backend/tests/parsing", "-q"],
-        [sys.executable, "-m", "pytest", "backend/tests/extraction", "-q"],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "backend/tests/parsing",
+            "-q",
+            "--confcutdir=backend/tests/parsing",
+        ],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "backend/tests/extraction",
+            "-q",
+            "--confcutdir=backend/tests/extraction",
+            "--ignore=backend/tests/extraction/test_writer.py",
+            "--ignore=backend/tests/extraction/test_llm_real.py",
+        ],
         [
             sys.executable,
             "-m",
