@@ -17,6 +17,7 @@ router = APIRouter(prefix="/api/graph", tags=["graph"])
 
 _LIST_ENTITIES = """
 MATCH (e:Entity)
+WHERE $document_id IS NULL OR e.document_id = $document_id
 WITH e, COUNT { (e)-[:RELATES]-() } + COUNT { (:Chunk)-[:MENTIONS]->(e) } AS degree
 RETURN e.entity_id AS entity_id, e.name AS name, e.entity_type AS entity_type,
        e.document_id AS document_id, e.mention_count AS mention_count, degree
@@ -26,14 +27,18 @@ LIMIT $limit
 
 _LIST_EDGES = """
 MATCH (s:Entity)-[r:RELATES]->(t:Entity)
+WHERE $document_id IS NULL
+   OR (s.document_id = $document_id AND t.document_id = $document_id)
 RETURN s.entity_id AS source, t.entity_id AS target, r.type AS type,
-       r.confidence AS confidence
+       r.confidence AS confidence, r.evidence_chunk_id AS evidence_chunk_id
 LIMIT $limit
 """
 
 _NEIGHBORS = """
 MATCH (center:Entity {entity_id: $entity_id})
+WHERE $document_id IS NULL OR center.document_id = $document_id
 OPTIONAL MATCH (center)-[r1]-(nbr:Entity)
+WHERE $document_id IS NULL OR nbr.document_id = $document_id
 WITH center, collect(DISTINCT nbr) AS neighbors
 UNWIND CASE WHEN size(neighbors)=0 THEN [center] ELSE neighbors + [center] END AS n
 WITH collect(DISTINCT n) AS all_nodes
@@ -46,13 +51,16 @@ RETURN collect(DISTINCT {
 }) AS nodes,
        collect(DISTINCT {
   source: startNode(r).entity_id, target: endNode(r).entity_id,
-  type: r.type, confidence: r.confidence
+  type: r.type, confidence: r.confidence,
+  evidence_chunk_id: r.evidence_chunk_id
 }) AS edges
 """
 
 _SEARCH = """
 MATCH (e:Entity)
-WHERE toLower(e.name) CONTAINS toLower($q) OR toLower(e.normalized_name) CONTAINS toLower($q)
+WHERE ($document_id IS NULL OR e.document_id = $document_id)
+  AND (toLower(e.name) CONTAINS toLower($q)
+       OR toLower(e.normalized_name) CONTAINS toLower($q))
 RETURN e.entity_id AS entity_id, e.name AS name, e.entity_type AS entity_type,
        e.document_id AS document_id
 ORDER BY e.name
@@ -149,6 +157,7 @@ def _edge(row: dict) -> dict:
         "target": row["target"],
         "type": row["type"] or "",
         "confidence": row.get("confidence"),
+        "evidenceChunkId": row.get("evidence_chunk_id"),
     }
 
 
@@ -175,15 +184,25 @@ def _subgraph_edge(row: dict) -> GraphEdge:
 
 @router.get("/entities")
 async def list_entities(
-    request: Request, limit: int = Query(100, ge=1, le=1000)
+    request: Request,
+    limit: int = Query(100, ge=1, le=1000),
+    document_id: str | None = Query(None),
+    documentId: str | None = Query(None),
 ) -> dict:
     """返回实体列表与它们之间的 RELATES 边（前端 GraphData）。"""
     driver = request.app.state.neo4j
+    effective_document_id = document_id or documentId
     ent_records, _, _ = driver.execute_query(
-        _LIST_ENTITIES, limit=limit, database_="neo4j"
+        _LIST_ENTITIES,
+        limit=limit,
+        document_id=effective_document_id,
+        database_="neo4j",
     )
     edge_records, _, _ = driver.execute_query(
-        _LIST_EDGES, limit=limit * 2, database_="neo4j"
+        _LIST_EDGES,
+        limit=limit * 2,
+        document_id=effective_document_id,
+        database_="neo4j",
     )
     entity_ids = {r["entity_id"] for r in ent_records}
     return {
@@ -198,11 +217,20 @@ async def list_entities(
 
 
 @router.get("/entities/{entity_id}/neighbors")
-async def get_neighbors(request: Request, entity_id: str) -> dict:
+async def get_neighbors(
+    request: Request,
+    entity_id: str,
+    document_id: str | None = Query(None),
+    documentId: str | None = Query(None),
+) -> dict:
     """返回单个实体的 1 跳邻域（含中心节点）。"""
     driver = request.app.state.neo4j
+    effective_document_id = document_id or documentId
     records, _, _ = driver.execute_query(
-        _NEIGHBORS, entity_id=entity_id, database_="neo4j"
+        _NEIGHBORS,
+        entity_id=entity_id,
+        document_id=effective_document_id,
+        database_="neo4j",
     )
     if not records or not records[0]["nodes"]:
         raise HTTPException(status_code=404, detail=f"实体不存在: {entity_id}")
@@ -226,6 +254,7 @@ async def get_neighbors(request: Request, entity_id: str) -> dict:
                 "target": e["target"],
                 "type": e["type"] or "",
                 "confidence": e.get("confidence"),
+                "evidenceChunkId": e.get("evidence_chunk_id"),
             }
             for e in edges
         ],
@@ -309,12 +338,21 @@ async def get_subgraph(
 
 @router.get("/search")
 async def search_entities(
-    request: Request, q: str = Query(..., min_length=1), limit: int = Query(20, ge=1, le=100)
+    request: Request,
+    q: str = Query(..., min_length=1),
+    limit: int = Query(20, ge=1, le=100),
+    document_id: str | None = Query(None),
+    documentId: str | None = Query(None),
 ) -> list[dict]:
     """实体名称模糊搜索（name 或 normalized_name CONTAINS q，大小写不敏感）。"""
     driver = request.app.state.neo4j
+    effective_document_id = document_id or documentId
     records, _, _ = driver.execute_query(
-        _SEARCH, q=q, limit=limit, database_="neo4j"
+        _SEARCH,
+        q=q,
+        limit=limit,
+        document_id=effective_document_id,
+        database_="neo4j",
     )
     return [_node(r.data()) for r in records]
 
