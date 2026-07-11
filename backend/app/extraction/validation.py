@@ -114,4 +114,3 @@ def validate_chunk_result(
 
 # A descriptive alias for callers that prefer the candidate terminology.
 validate_extraction_candidates = validate_chunk_result
-
