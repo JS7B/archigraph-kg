@@ -3,7 +3,7 @@
 from app.extraction import extractor
 from app.extraction.errors import ExtractionError
 from app.extraction.models import ChunkExtractionResult
-from app.parsing.models import Chunk, ParsedDocument, SourceLocation
+from app.parsing.models import Chunk, ExtractionPolicy, ParsedDocument, SourceLocation
 
 
 def _doc(n: int) -> ParsedDocument:
@@ -32,3 +32,21 @@ def test_partial_failure_recorded(monkeypatch):
     assert len(extractions) == 2
     assert len(failures) == 1
     assert failures[0].chunk_id == "test_d#1"
+
+
+def test_skip_chunk_does_not_call_llm_or_create_extraction(monkeypatch):
+    calls = []
+
+    def fake_extract(*args, **kwargs):
+        calls.append((args, kwargs))
+        return ChunkExtractionResult(entities=[], relations=[])
+
+    monkeypatch.setattr(extractor, "extract_chunk", fake_extract)
+    doc = _doc(1)
+    doc.chunks[0].extraction_policy = ExtractionPolicy.SKIP
+
+    extractions, failures = extractor.extract_document(doc)
+
+    assert calls == []
+    assert extractions == []
+    assert failures == []
