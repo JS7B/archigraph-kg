@@ -1,6 +1,7 @@
 """base 分派与 parse_file 组装测试。"""
 
 import pytest
+import app.parsing as public_parsing
 
 from app.parsing.base import parse_file
 from app.parsing.errors import ParseError
@@ -45,6 +46,34 @@ def test_parse_file_markdown_preserves_code_and_config_chunk_metadata(tmp_path):
     assert len(config_chunks) == 1
     assert config_chunks[0].language == "json"
     assert config_chunks[0].extraction_policy is ExtractionPolicy.SKIP
+    assert all(
+        doc.raw_text[c.location.char_start : c.location.char_end] == c.text
+        for c in doc.chunks
+    )
+
+
+def test_public_parser_exposes_content_policy_metadata(tmp_path):
+    p = tmp_path / "mixed.md"
+    raw = (
+        "# Example\n\n"
+        "A paragraph.\n\n"
+        "```python\nprint('hi')\n```\n\n"
+        "```json\n{\"port\": 8000}\n```\n"
+    )
+    p.write_text(raw, encoding="utf-8")
+
+    doc = public_parsing.parse_file(str(p))
+
+    assert hasattr(public_parsing, "ContentKind")
+    assert hasattr(public_parsing, "ExtractionPolicy")
+    code_chunk = next(c for c in doc.chunks if c.content_kind.value == "code")
+    config_chunk = next(c for c in doc.chunks if c.content_kind.value == "config")
+    assert code_chunk.content_kind is public_parsing.ContentKind.CODE
+    assert code_chunk.language == "python"
+    assert code_chunk.extraction_policy is public_parsing.ExtractionPolicy.SPECIALIZED
+    assert config_chunk.content_kind is public_parsing.ContentKind.CONFIG
+    assert config_chunk.language == "json"
+    assert config_chunk.extraction_policy is public_parsing.ExtractionPolicy.SKIP
     assert all(
         doc.raw_text[c.location.char_start : c.location.char_end] == c.text
         for c in doc.chunks
