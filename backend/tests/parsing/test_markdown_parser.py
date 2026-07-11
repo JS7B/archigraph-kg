@@ -1,6 +1,7 @@
 """markdown_parser 测试：标题路径、偏移、标题不重复。"""
 
 from app.parsing.markdown_parser import parse_markdown
+from app.parsing.models import ContentKind, ExtractionPolicy
 
 
 def test_heading_path_tracks_hierarchy(tmp_path):
@@ -47,3 +48,19 @@ def test_sibling_heading_pops_stack(tmp_path):
     raw, blocks = parse_markdown(str(p))
     second = [b for b in blocks if "乙" in b.text][0]
     assert second.heading_path == ["第二节"]
+def test_fenced_block_keeps_full_text_offsets_and_metadata(tmp_path):
+    md = "# Config\n\n```json\n{\"port\": 8000}\n```\n\nAfter."
+    p = tmp_path / "fenced.md"
+    p.write_text(md, encoding="utf-8")
+
+    raw, blocks = parse_markdown(str(p))
+
+    fenced = [b for b in blocks if b.content_kind is ContentKind.CONFIG][0]
+    assert fenced.text == '```json\n{\"port\": 8000}\n```'
+    assert raw[fenced.char_start : fenced.char_end] == fenced.text
+    assert not fenced.text.endswith("\n")
+    assert fenced.language == "json"
+    assert fenced.extraction_policy is ExtractionPolicy.SKIP
+    assert fenced.heading_path == ["Config"]
+    after = [b for b in blocks if b.text == "After."][0]
+    assert raw[after.char_start : after.char_end] == "After."

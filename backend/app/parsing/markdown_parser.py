@@ -6,10 +6,12 @@ raw_text 保留原始全文（含标题语法），保证偏移可追溯。
 
 import re
 
+from app.parsing.content_classifier import classify_block
 from app.parsing.models import Block
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 _PARA_SPLIT = re.compile(r"\n[ \t]*\n")
+_FENCE_OPEN = re.compile(r"^(?P<indent> {0,3})(?P<marker>`{3,}|~{3,})(?P<info>.*)$")
 
 
 def _heading_path_at(raw_text: str, upto: int) -> list[str]:
@@ -30,22 +32,81 @@ def parse_markdown(path: str) -> tuple[str, list[Block]]:
         raw_text = f.read()
 
     blocks: list[Block] = []
-    pos = 0
-    for part in _PARA_SPLIT.split(raw_text):
+
+    def append_plain(start: int, end: int) -> None:
+        pos = start
+        for separator in _PARA_SPLIT.finditer(raw_text, start, end):
+            append_plain_part(pos, separator.start())
+            pos = separator.end()
+        append_plain_part(pos, end)
+
+    def append_plain_part(start: int, end: int) -> None:
+        part = raw_text[start:end]
         if part.strip() == "":
-            pos += len(part)
-            continue
+            return
         stripped = part.strip()
-        start = raw_text.find(stripped, pos)
-        end = start + len(stripped)
-        heading_path = _heading_path_at(raw_text, start + 1)
+        block_start = start + len(part) - len(part.lstrip())
+        block_end = block_start + len(stripped)
+        kind, language, policy = classify_block(stripped)
         blocks.append(
             Block(
                 text=stripped,
-                char_start=start,
-                char_end=end,
-                heading_path=heading_path,
+                char_start=block_start,
+                char_end=block_end,
+                heading_path=_heading_path_at(raw_text, block_start + 1),
+                content_kind=kind,
+                language=language,
+                extraction_policy=policy,
             )
         )
-        pos = end
+
+    spans: list[tuple[int, int, str]] = []
+    lines = raw_text.splitlines(keepends=True)
+    offset = 0
+    open_start: int | None = None
+    open_marker: str | None = None
+    open_info = ""
+    for line in lines:
+        content = line.rstrip("\r\n")
+        match = _FENCE_OPEN.match(content)
+        if open_start is None:
+            if match:
+                open_start = offset
+                open_marker = match.group("marker")
+                open_info = match.group("info").strip()
+        elif (
+            match
+            and match.group("marker")[0] == open_marker[0]
+            and len(match.group("marker")) >= len(open_marker)
+            and not match.group("info").strip()
+        ):
+            # Keep the closing marker itself in the block, but leave its line
+            # ending for the following plain-text span. This keeps offsets
+            # traceable without swallowing the next paragraph.
+            end = offset + len(content)
+            spans.append((open_start, end, open_info))
+            open_start = None
+            open_marker = None
+            open_info = ""
+        offset += len(line)
+    if open_start is not None:
+        spans.append((open_start, len(raw_text), open_info))
+
+    cursor = 0
+    for start, end, info in spans:
+        append_plain(cursor, start)
+        kind, language, policy = classify_block(raw_text[start:end], fenced_language=info)
+        blocks.append(
+            Block(
+                text=raw_text[start:end],
+                char_start=start,
+                char_end=end,
+                heading_path=_heading_path_at(raw_text, start + 1),
+                content_kind=kind,
+                language=language,
+                extraction_policy=policy,
+            )
+        )
+        cursor = end
+    append_plain(cursor, len(raw_text))
     return raw_text, blocks
