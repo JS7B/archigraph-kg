@@ -1,3 +1,4 @@
+import { useLayoutEffect } from 'react'
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { subscribeRunEvents } from '../api/sse'
@@ -81,6 +82,30 @@ describe('useRunEvents', () => {
       runA.emit(succeededEvent)
       runA.fail(new Event('error'))
     })
+
+    expect(result.current.events).toEqual([])
+    expect(result.current.currentStage).toBe('idle')
+    expect(result.current.error).toBeNull()
+    expect(onTerminal).not.toHaveBeenCalled()
+  })
+
+  it('ignores an obsolete run during the next run layout commit', () => {
+    const onTerminal = vi.fn()
+    const { result, rerender } = renderHook(
+      ({ runId }: { runId: string }) => {
+        const state = useRunEvents(runId, { onTerminal })
+        useLayoutEffect(() => {
+          if (runId === 'run-b') {
+            subscriptions.get('run-a')!.emit(succeededEvent)
+            subscriptions.get('run-a')!.fail(new Event('error'))
+          }
+        }, [runId])
+        return state
+      },
+      { initialProps: { runId: 'run-a' } },
+    )
+
+    rerender({ runId: 'run-b' })
 
     expect(result.current.events).toEqual([])
     expect(result.current.currentStage).toBe('idle')

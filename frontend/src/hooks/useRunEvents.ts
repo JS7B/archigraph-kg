@@ -20,6 +20,7 @@ export function useRunEvents(runId: string | null, options: UseRunEventsOptions 
   const [error, setError] = useState<string | null>(null)
   const [prevRunId, setPrevRunId] = useState(runId)
   const notifyTerminal = useEffectEvent((event: RunEvent) => options.onTerminal?.(event))
+  const isCurrentRun = useEffectEvent((subscriptionRunId: string) => subscriptionRunId === runId)
 
   // runId 一变（含变回 null）立即在渲染期清空事件，而非等 effect。否则 Run 结束
   // （runId→null）时旧终态事件会滞留在 events 里；下个 Run 起（null→newId）触发消费方的
@@ -34,13 +35,14 @@ export function useRunEvents(runId: string | null, options: UseRunEventsOptions 
 
   useEffect(() => {
     if (!runId) return
+    const subscriptionRunId = runId
     let active = true
     let handledTerminal = false
 
     const unsubscribe = subscribeRunEvents(
-      runId,
+      subscriptionRunId,
       (event) => {
-        if (!active) return
+        if (!active || !isCurrentRun(subscriptionRunId)) return
         setEvents((prev) => [...prev, event])
         setCurrentStage(event.stage)
         if (TERMINAL.has(event.status) && !handledTerminal) {
@@ -49,7 +51,9 @@ export function useRunEvents(runId: string | null, options: UseRunEventsOptions 
         }
       },
       () => {
-        if (active) setError('SSE 连接中断，请确认后端正在运行，稍后重新提问重试')
+        if (active && isCurrentRun(subscriptionRunId)) {
+          setError('SSE 连接中断，请确认后端正在运行，稍后重新提问重试')
+        }
       },
     )
     return () => {
