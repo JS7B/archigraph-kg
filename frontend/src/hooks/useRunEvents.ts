@@ -34,11 +34,13 @@ export function useRunEvents(runId: string | null, options: UseRunEventsOptions 
 
   useEffect(() => {
     if (!runId) return
+    let active = true
     let handledTerminal = false
 
     const unsubscribe = subscribeRunEvents(
       runId,
       (event) => {
+        if (!active) return
         setEvents((prev) => [...prev, event])
         setCurrentStage(event.stage)
         if (TERMINAL.has(event.status) && !handledTerminal) {
@@ -46,9 +48,14 @@ export function useRunEvents(runId: string | null, options: UseRunEventsOptions 
           notifyTerminal(event)
         }
       },
-      () => setError('SSE 连接中断，请确认后端正在运行，稍后重新提问重试'),
+      () => {
+        if (active) setError('SSE 连接中断，请确认后端正在运行，稍后重新提问重试')
+      },
     )
-    return unsubscribe
+    return () => {
+      active = false
+      unsubscribe()
+    }
   }, [runId])
 
   return { events, currentStage, error }

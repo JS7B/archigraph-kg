@@ -25,11 +25,16 @@ const succeededEvent: RunEvent = {
 }
 
 describe('useRunEvents', () => {
-  let emit: (event: RunEvent) => void
+  const subscriptions = new Map<
+    string,
+    { emit: (event: RunEvent) => void; fail: (error: Event) => void }
+  >()
 
   beforeEach(() => {
-    vi.mocked(subscribeRunEvents).mockImplementation((_runId, onEvent) => {
-      emit = onEvent
+    vi.clearAllMocks()
+    subscriptions.clear()
+    vi.mocked(subscribeRunEvents).mockImplementation((runId, onEvent, onError) => {
+      subscriptions.set(runId, { emit: onEvent, fail: onError })
       return vi.fn()
     })
   })
@@ -40,7 +45,7 @@ describe('useRunEvents', () => {
       { initialProps: { runId: 'run-a' } },
     )
 
-    act(() => emit(runningEvent))
+    act(() => subscriptions.get('run-a')!.emit(runningEvent))
     expect(result.current.events).toEqual([runningEvent])
     expect(result.current.currentStage).toBe('searching')
 
@@ -55,11 +60,48 @@ describe('useRunEvents', () => {
     renderHook(() => useRunEvents('run-a', { onTerminal }))
 
     act(() => {
-      emit(succeededEvent)
-      emit(succeededEvent)
+      subscriptions.get('run-a')!.emit(succeededEvent)
+      subscriptions.get('run-a')!.emit(succeededEvent)
     })
 
     expect(onTerminal).toHaveBeenCalledTimes(1)
     expect(onTerminal).toHaveBeenCalledWith(succeededEvent)
+  })
+
+  it('ignores events, errors, and terminal callbacks from an obsolete run', () => {
+    const onTerminal = vi.fn()
+    const { result, rerender } = renderHook(
+      ({ runId }: { runId: string }) => useRunEvents(runId, { onTerminal }),
+      { initialProps: { runId: 'run-a' } },
+    )
+    const runA = subscriptions.get('run-a')!
+
+    rerender({ runId: 'run-b' })
+    act(() => {
+      runA.emit(succeededEvent)
+      runA.fail(new Event('error'))
+    })
+
+    expect(result.current.events).toEqual([])
+    expect(result.current.currentStage).toBe('idle')
+    expect(result.current.error).toBeNull()
+    expect(onTerminal).not.toHaveBeenCalled()
+  })
+
+  it('uses the latest terminal callback without resubscribing', () => {
+    const firstCallback = vi.fn()
+    const latestCallback = vi.fn()
+    const { rerender } = renderHook(
+      ({ onTerminal }) => useRunEvents('run-a', { onTerminal }),
+      { initialProps: { onTerminal: firstCallback } },
+    )
+
+    rerender({ onTerminal: latestCallback })
+    expect(subscribeRunEvents).toHaveBeenCalledTimes(1)
+
+    act(() => subscriptions.get('run-a')!.emit(succeededEvent))
+
+    expect(firstCallback).not.toHaveBeenCalled()
+    expect(latestCallback).toHaveBeenCalledOnce()
   })
 })
