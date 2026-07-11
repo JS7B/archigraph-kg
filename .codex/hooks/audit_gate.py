@@ -56,9 +56,9 @@ PYTHON_RESOLUTION_COMMAND = [
     sys.executable,
     "-m",
     "pytest",
-    "backend/tests/resolution",
+    "tests/resolution",
     "-q",
-    "--confcutdir=backend/tests/resolution",
+    "--confcutdir=tests/resolution",
 ]
 PYTHON_GRAPH_COMMAND = [
     sys.executable,
@@ -179,6 +179,14 @@ def _npm_script_exists(repo: Path, script: str) -> bool:
     return script in data.get("scripts", {})
 
 
+def _command_cwd(command: list[str], repo: Path) -> Path:
+    if command == PYTHON_RESOLUTION_COMMAND:
+        return repo / "backend"
+    if command[0] == NPM_EXECUTABLE:
+        return repo / "frontend"
+    return repo
+
+
 def _is_allowed(path: str, allowed: tuple[str, ...]) -> bool:
     return any(
         path.startswith(item) if item.endswith("/") else path == item
@@ -245,7 +253,7 @@ def audit_repository(
             )
 
     for command in commands_for_paths(paths):
-        cwd = repo / "frontend" if command[0] == NPM_EXECUTABLE else repo
+        cwd = _command_cwd(command, repo)
         try:
             if (
                 command[:2] == [NPM_EXECUTABLE, "run"]
