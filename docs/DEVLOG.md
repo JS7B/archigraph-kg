@@ -63,3 +63,13 @@
   1. healthcheck 里探活命令的密码，最初误写成 `$${NEO4J_PASSWORD}`（双 `$` 是转义给容器内 shell），但容器里没有这个变量。改成单 `$`，让 compose 在解析配置时就从 `.env` 插值进去。
   2. 第一次 `docker compose up` 拉镜像时连不上 Docker Hub（`registry-1.docker.io:443` 超时）——国内网络访问官方镜像仓库不稳定。切换网络后重试即成功。（长期方案：配置国内镜像加速器。）
   3. 容器刚 `Started` 时健康检查still是 `starting`，Neo4j 初始化要约 30 秒才转 `healthy`，需稍等再验证。
+
+---
+
+## 2026-07-11 建立 Codex 分支审计门禁
+
+- **做了什么**：新增项目级 `Stop` / `SubagentStop` Hook 和可手动调用、不会改源码的分支审计脚本，覆盖改动范围、工作树、`git diff --check` 与板块验证命令，并补齐成功、异常失败和防循环测试。
+- **这是什么**：Hook 是代理生命周期中的机械门禁，在 Codex 准备停止时执行确定性脚本；heartbeat 是定期查看并行工作线状态的只读观察者；主窗口则是阅读完整 diff、运行最终验证并决定是否合并的人。
+- **为什么需要**：实现工人容易只验证自己刚改的局部，且多个 worktree 并行时问题可能较晚才暴露。三层审计让即时失败、跨窗口进度和最终合并分别有人负责，同时保持每条工作线的责任边界。
+- **为什么这么做**：把路径选择与 Hook JSON 决策写成可单测的 Python 逻辑，并让 Hook 和主窗口复用同一个 CLI；运行异常统一 fail closed 为 block JSON，失败只请求继续一次，成功解析后的 `stop_hook_active=true` 优先放行，既能促使代理修正又不会无限循环。Hook 使用通用 `python3` 入口和 Windows `conda run` 覆盖，内部 pytest 则复用 `sys.executable`，路径始终从 git 根目录解析，不把个人绝对路径固化为跨机器方案。
+- **踩了什么坑**：文件白名单不能像目录一样做前缀匹配，否则 `.bak` 和伪子路径会越权；git、JSON、npm 或执行器异常也不能直接冒泡成 exit 1，否则 Codex 收不到 continuation JSON。Windows 外层 `conda run` 若再嵌套一层 Conda，并转发 Unicode pytest 输出，还可能触发 GBK 编码失败，因此内部命令复用当前解释器，Hook stdout 统一为 ASCII JSON。`npm run build` 和 pytest 仍可能写 ignored 产物，而且分支可修改自身 Hook，所以它是受信任协作门禁，不是恶意分支安全边界。
