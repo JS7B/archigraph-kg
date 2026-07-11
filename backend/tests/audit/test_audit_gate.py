@@ -15,6 +15,7 @@ from audit_gate import (  # noqa: E402
     changed_paths,
     commands_for_paths,
     hook_decision,
+    npm_executable,
     render_decision,
 )
 
@@ -42,11 +43,17 @@ def init_repo(repo: Path) -> None:
 def test_frontend_paths_select_all_frontend_gates():
     commands = commands_for_paths(["frontend/src/App.tsx"])
     rendered = [" ".join(command) for command in commands]
+    npm = npm_executable()
 
-    assert any("npm run lint" in command for command in rendered)
-    assert any("npm run typecheck" in command for command in rendered)
-    assert any("npm run test:run" in command for command in rendered)
-    assert any("npm run build" in command for command in rendered)
+    assert any(f"{npm} run lint" in command for command in rendered)
+    assert any(f"{npm} run typecheck" in command for command in rendered)
+    assert any(f"{npm} run test:run" in command for command in rendered)
+    assert any(f"{npm} run build" in command for command in rendered)
+
+
+def test_npm_launcher_uses_cmd_only_on_windows():
+    assert npm_executable("win32") == "npm.cmd"
+    assert npm_executable("linux") == "npm"
 
 
 def test_active_stop_hook_never_blocks_again():
@@ -198,7 +205,10 @@ def test_missing_npm_is_recorded_as_audit_failure(tmp_path):
 
     report = audit_repository(repo, run_command=missing_npm)
 
-    assert any("npm run lint" in item and "npm is missing" in item for item in report.failures)
+    assert any(
+        f"{npm_executable()} run lint" in item and "npm is missing" in item
+        for item in report.failures
+    )
 
 
 def test_unexpected_executor_exception_is_recorded_as_audit_failure(tmp_path):

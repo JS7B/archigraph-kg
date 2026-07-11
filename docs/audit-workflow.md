@@ -18,6 +18,7 @@ Hook 的通用入口使用 `python3`，Windows 则通过 `commandWindows` 使用
 - 检查工作树是否干净，并分别运行提交、未暂存和已暂存差异的 `git diff --check`；
 - 对三条固定工作线检查文件范围；尾随 `/` 的目录白名单允许前缀匹配，文件白名单只允许精确匹配，防止 `.bak` 或伪子路径越权；
 - `frontend/` 改动选择 lint、typecheck、Vitest 和构建，`evals/`/评估文档改动选择评估单测，Hook/审计测试改动选择审计单测；
+- Windows 上 Python 子进程使用 `npm.cmd` 启动 npm，避开 PATH 中无法被 `subprocess.run` 直接执行的 extensionless POSIX launcher；非 Windows 仍使用标准 `npm`；
 - Python 单测命令使用启动 Hook 的 `sys.executable -m pytest`，复用已经选定的环境，不在 Windows `commandWindows` 外层之内再次嵌套 `conda run`；
 - 非前端质量分支缺少某个 npm script 时明确记录为跳过，避免无关分支因尚未合并的前端脚本失败。
 
