@@ -5,6 +5,8 @@
 > 展示名 **Archigraph** = archive（档案）+ graph（图谱），呼应招牌组件「像素档案员 AgentRoom」。
 > 状态：核心链路全部完成且端到端验证通过（解析 → 图谱 → 抽取 → Agentic RAG 问答 → 多轮对话记忆 → Run/SSE → 前端工作台 → 评估），并经一轮 PR 审计整改（安全/可复现/正确性/无障碍加固）与一轮体验升级（回答渲染 / 图谱降噪 / AgentRoom 行为状态机）。最新一轮 4 样本评估中，实体召回率已提升到 **87.7%**（标注加权池化）/ **86.6%**（宏平均），其余硬指标继续达标。
 
+> 2026-07 图谱质量重构已合并：解析层按内容类型决定抽取策略；抽取结果必须携带 chunk evidence 并经过候选、关系端点和置信度门禁；跨文档实体采用 exact/alias 优先、模糊匹配仅进入 review；图谱前端改为社区/局部子图优先并展示证据。当前主分支的单元回归、评估、前端构建和 Hook 审计均已通过；Neo4j 集成测试仍需在本地 `.env` 与容器可用时执行。
+
 ## 技术栈
 
 - **后端**：Python 3.11+ · FastAPI · Pydantic
@@ -45,7 +47,7 @@ python -m uvicorn app.main:app --reload --port 8000
 # API: http://localhost:8000，交互文档 /docs，健康检查 /health、/health/deps
 ```
 
-核心端点：文档上传入库 `POST /api/documents`、问答 `POST /api/chat`（异步 Agentic RAG + SSE 进度流 `/api/runs/{runId}/events/stream`，多轮检索时前端像素房间跟着 Agent 决策实时走）、图谱查询 `GET /api/graph/entities`、**会话管理** `GET/POST /api/conversations`（多轮对话记忆：历史存 Neo4j、问答向量化、刷新可恢复）。
+核心端点：文档上传入库 `POST /api/documents`、问答 `POST /api/chat`（异步 Agentic RAG + SSE 进度流 `/api/runs/{runId}/events/stream`，多轮检索时前端像素房间跟着 Agent 决策实时走）、图谱查询 `GET /api/graph/entities`、局部子图 `GET /api/graph/entities/{id}/subgraph`、社区概览 `GET /api/graph/communities`、**会话管理** `GET/POST /api/conversations`（多轮对话记忆：历史存 Neo4j、问答向量化、刷新可恢复）。
 
 > 安全：若在 `.env` 配置了 `API_KEY`，所有非 `/health` 接口需在请求头带 `X-API-Key`；为空（默认）则不鉴权，便于本地开发。
 
