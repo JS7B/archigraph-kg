@@ -307,6 +307,19 @@
 
 验证：抽取聚焦测试 50 passed；runs 无服务单元测试 4 passed / 1 个 live Neo4j 用例 deselected；合并后连接 healthy Neo4j 的后端回归 269 passed（主动排除两组真实 LLM 用例）；评估测试 42 passed；审计基础设施 30 passed。6 个 80ms 合成远程调用从串行 0.486s 降至 3 worker 0.164s（约 2.96x，仅证明等待可重叠，不作为真实模型 SLA）。
 
+## Wave 2：规范实体覆盖层（2026-07-16）
+
+- [x] 保留文档级 `Entity` / `MENTIONS` / `RELATES` 源图，新增 accepted-only 的 `Entity-[:RESOLVES_TO]->CanonicalEntity`，未给规范实体附加 `Entity` 标签或规范 `RELATES`。
+- [x] 规范 ID 使用 `canonical:v1:<sha256(normalized_name)>`；类型不进入身份，`canonical_id` 唯一约束与 `normalized_name` 普通索引均已在线。
+- [x] bootstrap、exact 与带真实 Entity/Document/Chunk 来源的 alias 可写入；显式 alias 优先于普通 exact，可纠正已经 bootstrap 的旧拼写，下一轮可从 accepted alias 边重建。
+- [x] fuzzy、exact/alias 冲突只进入 review；候选 ID 稳定排序，缺 mention 的实体保持 unresolved，均不创建 accepted 边。
+- [x] 抽取 pipeline 在源图写入后接入规范解析，并只追加 diagnostics，不改变源实体、关系和 mention 统计。
+- [x] 提供 `python -m app.resolution.backfill` 幂等全库回填；日常单文档解析与删除只清理本次实际涉及的旧规范目标，不顺带整理共享个人图谱。
+- [x] 文档删除保持单条 Cypher；Document 已缺失但 Entity 残留时仍可清理，删除 A 保留 B 支持的共享规范实体，删除最后来源才清孤儿。
+- [x] Wave 1 的抽取质量目标 X 继续暂缓：当前只有两片段确定性 fixture，没有足够代表性的真实模型 precision 快照，不据此修改 prompt 或过滤规则。
+
+验证：真实 Neo4j resolution 生命周期 47 passed；主仓库非 LLM 后端回归 299 passed；评估 42 passed；审计基础设施 31 passed。对现有个人图谱连续执行两次全库 backfill，结果均为 accepted=121 / review=17 / unresolved=0 / bootstrapped=121；源 `Entity` 138、`MENTIONS` 193、`RELATES` 89 的数量与内容指纹前后完全一致。最终 `CanonicalEntity` 121、`RESOLVES_TO` 121，错误标签、规范 RELATES、伪证据、多目标 source、孤儿 canonical 均为 0。
+
 ## Review
 
 - 2026-06-16：将项目定位为个人知识图谱 GraphRAG Agent。确认 OpenAI-compatible 调用和 Neo4j 图谱存储，形成初始实现路线。

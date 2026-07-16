@@ -32,7 +32,7 @@ Wave 1 established metric semantics with a two-slice reviewed fixture. It did no
 - Load canonical references from `CanonicalEntity`. Reconstruct aliases only from already accepted source links whose `RESOLVES_TO.method = 'alias'` and whose evidence chunk really mentions that source entity.
 - The service and backfill function accept optional `Iterable[AliasRecord]` for first-time explicit aliases. Each record must identify an existing source entity, source document, real mentioning chunk, and existing target canonical before it can enter the resolver. The CLI may load the same records from an optional JSONL path. Provenance-free alias mappings are forbidden.
 - Resolve records in stable source order. A bootstrap canonical is registered immediately so later matching entities in the same backfill resolve to it.
-- Before writing a decision, remove the source entity's previous `RESOLVES_TO`; then write at most one accepted link or review metadata. Repeated execution must be idempotent.
+- Before writing a decision, remove the source entity's previous `RESOLVES_TO`; then write at most one accepted link or review metadata. Repeated execution must be idempotent. Runtime cleanup is scoped to the previous canonical targets of the current sources; only the explicit whole-database backfill may perform global orphan cleanup.
 - Persistence consumes an explicit source record containing `source_document_id`. Runtime receives `doc.document_id`; backfill reads `Entity.document_id`. It must not infer provenance with `entity_id.split('::')`; the existing pure adapter's legacy convenience behavior is not authoritative for writes.
 - Cypher must match `(evidence:Chunk)-[:MENTIONS]->(source)` before creating an accepted edge. Accepted writes clear stale review properties; review/unresolved writes delete any old accepted link. Accepted-to-review and review-to-accepted transitions are both supported.
 - Integrate resolution after the existing source extraction writer. Append resolution diagnostics to `ExtractionStats.diagnostics` without changing source entity/relation counts.
@@ -42,7 +42,7 @@ Wave 1 established metric semantics with a two-slice reviewed fixture. It did no
 
 - Provide an internal function and CLI command, runnable from `backend/` as `python -m app.resolution.backfill`, that reads every source `Entity` plus real incoming mentions and explicit `document_id` in stable `entity_id` order, resolves them through the registry, writes decisions, and removes orphan canonicals. The CLI may accept `--aliases <jsonl>` for provenance-carrying first-time aliases.
 - Backfill must not call an LLM, reparse documents, or rewrite source `RELATES`.
-- Keep document deletion in one Cypher transaction. Deleting source entities detaches their accepted links, then deletes only canonical nodes with no remaining incoming `RESOLVES_TO`.
+- Keep document deletion in one Cypher transaction. Capture the canonical targets actually referenced by the document's source entities, detach those source links, then delete only captured targets with no remaining incoming `RESOLVES_TO`. Unrelated orphan canonicals must not be touched by a routine document deletion.
 - Deleting document A must preserve a canonical still supported by document B. Deleting the final source must remove the orphan canonical.
 
 ## Allowed files
@@ -73,7 +73,7 @@ No frontend, graph-router, QA, source writer, task list, environment, dependency
 - Delete A keeps B's canonical; deleting B removes it.
 - Existing resolution, extraction, graph, runs, QA, and deletion behavior does not regress.
 
-Unit tests use fake drivers or pure models. The worker may add optional real-Neo4j resolution tests that skip cleanly when configuration or the container is unavailable. The main checkout must run the live schema/backfill/delete path before merge completion.
+Unit tests use fake drivers or pure models. The worker may add optional real-Neo4j resolution tests that skip cleanly when configuration or the container is unavailable. Live tests must operate only on `test_resolution_*` records in a shared developer database; whole-database backfill is an explicit operator action run and verified by the main checkout after the test suite.
 
 ## Worker and brain protocol
 
