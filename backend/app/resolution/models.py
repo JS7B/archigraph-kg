@@ -18,6 +18,7 @@ class ResolutionMethod(str, Enum):
     EXACT = "exact"
     ALIAS = "alias"
     FUZZY = "fuzzy"
+    BOOTSTRAP = "bootstrap"
     FALLBACK = "fallback"
 
 
@@ -132,7 +133,8 @@ class ResolutionCandidate(BaseModel):
     source_document_id: str = Field(
         validation_alias=AliasChoices("source_document_id", "document_id")
     )
-    source_chunk_id: str = Field(
+    source_chunk_id: str | None = Field(
+        default=None,
         validation_alias=AliasChoices("source_chunk_id", "chunk_id")
     )
     canonical_id: str | None = Field(
@@ -151,16 +153,23 @@ class ResolutionCandidate(BaseModel):
     )
     evidence: ResolutionEvidence | None = None
     reason: str = ""
+    candidate_canonical_ids: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_candidate(self) -> "ResolutionCandidate":
         _require_text(self.source_entity_id, "source_entity_id")
         _require_text(self.source_name, "source_name")
         _require_text(self.source_document_id, "source_document_id")
-        _require_text(self.source_chunk_id, "source_chunk_id")
+        if self.source_chunk_id is not None:
+            _require_text(self.source_chunk_id, "source_chunk_id")
+        self.candidate_canonical_ids = sorted(set(self.candidate_canonical_ids))
+        for canonical_id in self.candidate_canonical_ids:
+            _require_text(canonical_id, "candidate_canonical_ids")
         if self.canonical_id is not None:
             _require_text(self.canonical_id, "canonical_id")
         if self.status is ResolutionStatus.ACCEPTED:
+            if self.source_chunk_id is None:
+                raise ValueError("accepted resolution requires source_chunk_id")
             if self.canonical_id is None:
                 raise ValueError("accepted resolution requires canonical_id")
             if self.evidence is None:
@@ -177,6 +186,8 @@ class ResolutionCandidate(BaseModel):
             if self.evidence.method is not self.method or self.evidence.score != self.score:
                 raise ValueError("accepted evidence must match candidate method and score")
         elif self.status is ResolutionStatus.REVIEW:
+            if self.source_chunk_id is None:
+                raise ValueError("review resolution requires source_chunk_id")
             if self.evidence is None:
                 raise ValueError("review resolution requires evidence")
             if (
@@ -200,6 +211,64 @@ class ResolutionCandidate(BaseModel):
         """Compatibility name used by extraction candidates."""
 
         return self.score
+
+
+class SourceEntityRecord(BaseModel):
+    """One persisted document-scoped Entity with explicit provenance."""
+
+    entity_id: str
+    name: str
+    entity_type: str = ""
+    normalized_name: str = ""
+    document_id: str
+    mention_chunk_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_source(self) -> "SourceEntityRecord":
+        _require_text(self.entity_id, "entity_id")
+        _require_text(self.name, "name")
+        _require_text(self.document_id, "document_id")
+        if self.entity_type:
+            _require_text(self.entity_type, "entity_type")
+        self.mention_chunk_ids = sorted(set(self.mention_chunk_ids))
+        for chunk_id in self.mention_chunk_ids:
+            _require_text(chunk_id, "mention_chunk_ids")
+        return self
+
+
+class AcceptedResolutionRecord(BaseModel):
+    """An existing accepted edge whose persisted evidence is still real."""
+
+    source_entity_id: str
+    source_document_id: str
+    source_chunk_id: str
+    canonical_id: str
+    method: ResolutionMethod
+    score: float = Field(ge=0.0, le=1.0)
+    reason: str
+
+    @model_validator(mode="after")
+    def _validate_existing(self) -> "AcceptedResolutionRecord":
+        for field_name in (
+            "source_entity_id",
+            "source_document_id",
+            "source_chunk_id",
+            "canonical_id",
+            "reason",
+        ):
+            _require_text(getattr(self, field_name), field_name)
+        return self
+
+
+class CanonicalizationResult(BaseModel):
+    """Stable summary returned by runtime canonicalization and backfill."""
+
+    decisions: list[ResolutionCandidate] = Field(default_factory=list)
+    diagnostics: list[str] = Field(default_factory=list)
+    accepted_count: int = 0
+    review_count: int = 0
+    unresolved_count: int = 0
+    bootstrap_count: int = 0
 
 
 class ResolutionGroup(BaseModel):

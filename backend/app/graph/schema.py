@@ -23,6 +23,10 @@ _CONSTRAINTS = (
     "FOR (c:Chunk) REQUIRE c.chunk_id IS UNIQUE",
     "CREATE CONSTRAINT entity_id_unique IF NOT EXISTS "
     "FOR (e:Entity) REQUIRE e.entity_id IS UNIQUE",
+    "CREATE CONSTRAINT canonical_entity_id_unique IF NOT EXISTS "
+    "FOR (c:CanonicalEntity) REQUIRE c.canonical_id IS UNIQUE",
+    "CREATE INDEX canonical_entity_normalized_name IF NOT EXISTS "
+    "FOR (c:CanonicalEntity) ON (c.normalized_name)",
     "CREATE CONSTRAINT conversation_id_unique IF NOT EXISTS "
     "FOR (cv:Conversation) REQUIRE cv.conversation_id IS UNIQUE",
     "CREATE CONSTRAINT message_id_unique IF NOT EXISTS "

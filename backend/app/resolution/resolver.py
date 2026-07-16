@@ -168,11 +168,19 @@ class DeterministicResolver:
     ) -> tuple[str, str, str, str]:
         if not isinstance(source_entity_id, str):
             entity = source_entity_id
-            source_entity_id = getattr(entity, "entity_id", None) or entity.get("entity_id")
-            source_name = source_name or getattr(entity, "name", None) or entity.get("name")
-            chunks = getattr(entity, "mention_chunk_ids", None) or entity.get("mention_chunk_ids", [])
+            get_field = (
+                entity.get
+                if isinstance(entity, Mapping)
+                else lambda name, default=None: getattr(entity, name, default)
+            )
+            source_entity_id = get_field("entity_id")
+            source_name = source_name or get_field("name")
+            source_document_id = (
+                source_document_id
+                or get_field("document_id")
+            )
+            chunks = get_field("mention_chunk_ids", [])
             source_chunk_id = source_chunk_id or (chunks[0] if chunks else None)
-        source_document_id = source_document_id or source_entity_id.split("::", 1)[0]
         if not all(isinstance(value, str) and value.strip() for value in (source_entity_id, source_name, source_document_id, source_chunk_id)):
             raise ValueError("source entity id, name, document id, and chunk id are required")
         return source_entity_id, source_name, source_document_id, source_chunk_id
@@ -208,6 +216,7 @@ class DeterministicResolver:
                 score=score,
                 evidence=evidence,
                 reason=evidence.reason,
+                candidate_canonical_ids=sorted(ids),
             )
         canonical_id = next(iter(ids))
         evidence = ResolutionEvidence(
@@ -247,7 +256,7 @@ class DeterministicResolver:
             )
             for canonical_id, reference in self._canonicals.items()
         )
-        scored.reverse()
+        scored.sort(key=lambda item: (-item[0], item[1]))
         if not scored or scored[0][0] < self.fuzzy_threshold:
             return self._unresolved(
                 source_entity_id,
@@ -259,6 +268,11 @@ class DeterministicResolver:
         best_score, best_id = scored[0]
         tied = len(scored) > 1 and best_score - scored[1][0] <= self.ambiguity_margin
         if tied:
+            candidate_ids = sorted(
+                canonical_id
+                for score, canonical_id in scored
+                if best_score - score <= self.ambiguity_margin
+            )
             reason = "ambiguous fuzzy candidates require review"
             evidence = ResolutionEvidence(
                 source_entity_id=source_entity_id,
@@ -279,6 +293,7 @@ class DeterministicResolver:
                 score=best_score,
                 evidence=evidence,
                 reason=reason,
+                candidate_canonical_ids=candidate_ids,
             )
         evidence = ResolutionEvidence(
             source_entity_id=source_entity_id,
@@ -300,6 +315,7 @@ class DeterministicResolver:
             score=best_score,
             evidence=evidence,
             reason="fuzzy candidate requires review before merge",
+            candidate_canonical_ids=[best_id],
         )
 
     @staticmethod

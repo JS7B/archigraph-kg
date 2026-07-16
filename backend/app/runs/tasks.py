@@ -236,11 +236,17 @@ def _do_delete(driver: Driver, document_id: str) -> None:
         MATCH (d:Document {document_id: $document_id})
         OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk)
         DETACH DELETE c
-        WITH d
+        WITH DISTINCT d
         DETACH DELETE d
         WITH 1 AS _
         MATCH (e:Entity {document_id: $document_id})
         DETACH DELETE e
+        WITH count(*) AS deleted_entities
+        OPTIONAL MATCH (canonical:CanonicalEntity)
+        WHERE NOT EXISTS {
+          MATCH (:Entity)-[:RESOLVES_TO]->(canonical)
+        }
+        DETACH DELETE canonical
         """,
         document_id=document_id,
         database_="neo4j",
