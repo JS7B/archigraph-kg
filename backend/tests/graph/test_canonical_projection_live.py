@@ -18,23 +18,28 @@ from app.runs import RunStore
 from app.runs.tasks import _do_delete
 
 
+def _connect_explicit_driver(uri: str, username: str, password: str):
+    """Connect to an explicitly requested live gate or fail without skipping."""
+
+    driver = GraphDatabase.driver(uri, auth=(username, password))
+    try:
+        driver.verify_connectivity()
+    except Exception:
+        driver.close()
+        raise
+    return driver
+
+
 @pytest.fixture(scope="module")
 def neo4j_driver():
     uri = os.getenv("WAVE3_NEO4J_URI")
     if not uri:
         pytest.skip("WAVE3_NEO4J_URI is not configured for isolated live tests")
-    driver = GraphDatabase.driver(
+    driver = _connect_explicit_driver(
         uri,
-        auth=(
-            os.getenv("WAVE3_NEO4J_USER", "neo4j"),
-            os.getenv("WAVE3_NEO4J_PASSWORD", "wave3-test-password"),
-        ),
+        os.getenv("WAVE3_NEO4J_USER", "neo4j"),
+        os.getenv("WAVE3_NEO4J_PASSWORD", "wave3-test-password"),
     )
-    try:
-        driver.verify_connectivity()
-    except Exception:
-        driver.close()
-        pytest.skip("isolated Wave 3 Neo4j is unavailable")
     yield driver
     driver.execute_query(
         """

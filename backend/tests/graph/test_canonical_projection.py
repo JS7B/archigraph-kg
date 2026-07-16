@@ -6,6 +6,8 @@ import random
 
 import pytest
 
+from tests.graph import test_canonical_projection_live as live_projection
+
 from app.graph.models import ProjectionCoverage
 from app.graph.projection import (
     aggregate_projection,
@@ -362,3 +364,30 @@ def test_bounded_bfs_is_depth_and_limit_exact():
     assert len(limited.nodes) == 3
     assert len(limited.edges) == 2
     assert limited.truncated is True
+
+
+def test_explicit_live_uri_connection_failure_is_not_skipped(monkeypatch):
+    class _BrokenDriver:
+        closed = False
+
+        def verify_connectivity(self):
+            raise RuntimeError("explicit live database is unavailable")
+
+        def close(self):
+            self.closed = True
+
+    driver = _BrokenDriver()
+    monkeypatch.setattr(
+        live_projection.GraphDatabase,
+        "driver",
+        lambda *args, **kwargs: driver,
+    )
+
+    with pytest.raises(RuntimeError, match="explicit live database is unavailable"):
+        live_projection._connect_explicit_driver(
+            "bolt://invalid.example:7687",
+            "neo4j",
+            "password",
+        )
+
+    assert driver.closed is True
