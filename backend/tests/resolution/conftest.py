@@ -26,6 +26,8 @@ def resolution_neo4j_driver():
     driver.execute_query(
         "MATCH (n) WHERE n.document_id STARTS WITH 'test_resolution_' "
         "OR (n:CanonicalEntity AND n.canonical_name STARTS WITH 'test_resolution_') "
+        "OR (n:CanonicalEntity AND "
+        "n.canonical_id STARTS WITH 'canonical:test_resolution_guard:') "
         "DETACH DELETE n",
         database_="neo4j",
     )

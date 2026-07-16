@@ -24,6 +24,8 @@ class FakeStore:
     existing: dict[str, AcceptedResolutionRecord] = field(default_factory=dict)
     writes: list[tuple[SourceEntityRecord, object]] = field(default_factory=list)
     orphan_cleanup_calls: int = 0
+    orphan_cleanup_scopes: list[list[str]] = field(default_factory=list)
+    global_orphan_cleanup_calls: int = 0
 
     def load_canonicals(self):
         return list(self.canonicals)
@@ -43,8 +45,12 @@ class FakeStore:
     def write_decision(self, source, decision):
         self.writes.append((source, decision))
 
-    def remove_orphan_canonicals(self):
+    def remove_orphan_canonicals(self, canonical_ids):
         self.orphan_cleanup_calls += 1
+        self.orphan_cleanup_scopes.append(sorted(canonical_ids))
+
+    def remove_all_orphan_canonicals(self):
+        self.global_orphan_cleanup_calls += 1
 
 
 def _source(entity_id: str, name: str, document_id: str, *chunks: str, entity_type="technology"):
@@ -252,6 +258,82 @@ def test_runtime_uses_explicit_document_id_not_entity_id_prefix():
     decision = store.writes[0][1]
     assert decision.source_document_id == "explicit-document"
     assert decision.evidence.source_document_id == "explicit-document"
+
+
+def test_runtime_orphan_cleanup_is_scoped_to_current_source_targets():
+    old = CanonicalEntityReference(
+        canonical_id="canonical:old",
+        canonical_name="Old",
+    )
+    target = CanonicalEntityReference(
+        canonical_id="canonical:target",
+        canonical_name="Target",
+    )
+    unrelated = CanonicalEntityReference(
+        canonical_id="canonical:unrelated",
+        canonical_name="Unrelated",
+    )
+    source = _source("doc::old", "Old", "doc", "chunk")
+    alias = AliasRecord(
+        alias="Old",
+        canonical_id=target.canonical_id,
+        source_entity_id=source.entity_id,
+        source_document_id=source.document_id,
+        source_chunk_id="chunk",
+    )
+    store = FakeStore(
+        canonicals=[old, target, unrelated],
+        valid_aliases=[alias],
+        existing={
+            source.entity_id: AcceptedResolutionRecord(
+                source_entity_id=source.entity_id,
+                source_document_id=source.document_id,
+                source_chunk_id="chunk",
+                canonical_id=old.canonical_id,
+                method=ResolutionMethod.BOOTSTRAP,
+                score=1.0,
+                reason="old bootstrap",
+            )
+        },
+    )
+
+    service.resolve_source_entities(
+        object(), [source], aliases=[alias], store=store
+    )
+
+    assert store.orphan_cleanup_scopes == [["canonical:old"]]
+    assert "canonical:unrelated" not in store.orphan_cleanup_scopes[0]
+    assert store.global_orphan_cleanup_calls == 0
+
+
+def test_review_transition_cleans_only_the_sources_previous_target():
+    source = _source("doc::ab", "AB", "doc", "chunk")
+    store = FakeStore(
+        canonicals=[
+            CanonicalEntityReference(canonical_id="canonical:old", canonical_name="AB"),
+            CanonicalEntityReference(canonical_id="canonical:split", canonical_name="ＡＢ"),
+            CanonicalEntityReference(
+                canonical_id="canonical:unrelated", canonical_name="Unrelated"
+            ),
+        ],
+        existing={
+            source.entity_id: AcceptedResolutionRecord(
+                source_entity_id=source.entity_id,
+                source_document_id=source.document_id,
+                source_chunk_id="chunk",
+                canonical_id="canonical:old",
+                method=ResolutionMethod.BOOTSTRAP,
+                score=1.0,
+                reason="old bootstrap",
+            )
+        },
+    )
+
+    service.resolve_source_entities(object(), [source], store=store)
+
+    assert store.writes[0][1].status is ResolutionStatus.REVIEW
+    assert store.orphan_cleanup_scopes == [["canonical:old"]]
+    assert store.global_orphan_cleanup_calls == 0
 
 
 def test_type_drift_does_not_create_a_second_canonical():

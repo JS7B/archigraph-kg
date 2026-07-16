@@ -11,11 +11,15 @@ class FakeStore:
         self.sources = getattr(driver, "sources", [])
         driver.store = self
         self.cleanup = 0
+        self.scoped_cleanup = []
 
     def load_source_entities(self):
         return self.sources
 
-    def remove_orphan_canonicals(self):
+    def remove_orphan_canonicals(self, canonical_ids):
+        self.scoped_cleanup.append(sorted(canonical_ids))
+
+    def remove_all_orphan_canonicals(self):
         self.cleanup += 1
 
 
@@ -51,6 +55,7 @@ def test_backfill_reads_explicit_source_records_and_cleans_orphans(monkeypatch):
     assert result == "result"
     assert captured["records"][0].document_id == "doc"
     assert captured["store"].cleanup == 1
+    assert captured["store"].scoped_cleanup == []
 
 
 def test_alias_jsonl_requires_full_provenance(tmp_path):

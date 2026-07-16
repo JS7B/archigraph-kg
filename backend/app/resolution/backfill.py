@@ -46,7 +46,7 @@ def backfill_canonical_overlay(
         database=database,
         store=store,
     )
-    store.remove_orphan_canonicals()
+    store.remove_all_orphan_canonicals()
     return result
 
 

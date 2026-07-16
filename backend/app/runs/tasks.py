@@ -241,11 +241,14 @@ def _do_delete(driver: Driver, document_id: str) -> None:
         FOREACH (document IN documents | DETACH DELETE document)
         WITH 1 AS _
         OPTIONAL MATCH (e:Entity {document_id: $document_id})
-        WITH collect(DISTINCT e) AS entities
+        OPTIONAL MATCH (e)-[:RESOLVES_TO]->(affected:CanonicalEntity)
+        WITH collect(DISTINCT e) AS entities,
+             collect(DISTINCT affected.canonical_id) AS affected_canonical_ids
         FOREACH (entity IN entities | DETACH DELETE entity)
-        WITH 1 AS _
+        WITH affected_canonical_ids
         OPTIONAL MATCH (canonical:CanonicalEntity)
-        WHERE NOT EXISTS {
+        WHERE canonical.canonical_id IN affected_canonical_ids
+          AND NOT EXISTS {
           MATCH (:Entity)-[:RESOLVES_TO]->(canonical)
         }
         WITH collect(DISTINCT canonical) AS canonicals

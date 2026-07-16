@@ -9,6 +9,8 @@ from app.resolution.models import (
     SourceEntityRecord,
 )
 from app.resolution.persistence import (
+    _REMOVE_ALL_ORPHANS,
+    _REMOVE_SCOPED_ORPHANS,
     _WRITE_ACCEPTED,
     _WRITE_REVIEW_OR_UNRESOLVED,
     CanonicalOverlayStore,
@@ -161,3 +163,17 @@ def test_source_load_query_reads_document_id_property_in_stable_order():
     assert "WHERE document.document_id = source.document_id" in compact
     assert "ORDER BY source.entity_id" in compact
     assert "split" not in compact.lower()
+
+
+def test_orphan_cleanup_can_be_scoped_without_touching_other_canonicals():
+    compact = " ".join(_REMOVE_SCOPED_ORPHANS.split())
+
+    assert "UNWIND $canonical_ids AS canonical_id" in compact
+    assert "{canonical_id: canonical_id}" in compact
+
+    driver = FakeDriver(records=[{"deleted": 0}])
+    CanonicalOverlayStore(driver).remove_orphan_canonicals(["canonical:test"])
+    _, params = driver.calls[0]
+    assert params["canonical_ids"] == ["canonical:test"]
+
+    assert "$canonical_ids" not in _REMOVE_ALL_ORPHANS
