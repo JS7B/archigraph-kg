@@ -92,12 +92,42 @@ def test_run_task_paths_select_targeted_backend_gate():
         sys.executable,
         "-m",
         "pytest",
-        "backend/tests/runs/test_tasks.py",
+        "tests/runs/test_tasks.py",
         "-q",
+        "--confcutdir=tests/runs",
+        "-k",
+        "not reads_history_and_writes_back",
     ]
 
     assert commands_for_paths(["backend/app/runs/tasks.py"]) == [expected]
     assert commands_for_paths(["backend/tests/runs/test_tasks.py"]) == [expected]
+
+
+def test_run_task_gate_runs_from_backend_directory(tmp_path):
+    expected = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "tests/runs/test_tasks.py",
+        "-q",
+        "--confcutdir=tests/runs",
+        "-k",
+        "not reads_history_and_writes_back",
+    ]
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    run_git(repo, "switch", "-c", "feat/kg-extraction")
+    commit_path(repo, "backend/app/runs/tasks.py")
+    calls: list[tuple[list[str], Path]] = []
+
+    def run_command(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+        calls.append((command, cwd))
+        return subprocess.CompletedProcess(command, 0, "passed", "")
+
+    report = audit_repository(repo, run_command=run_command)
+
+    assert report.failures == []
+    assert calls == [(expected, repo / "backend")]
 
 
 def test_resolution_paths_select_targeted_backend_gate():

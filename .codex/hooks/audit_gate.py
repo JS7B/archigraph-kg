@@ -56,8 +56,11 @@ PYTHON_RUN_TASKS_COMMAND = [
     sys.executable,
     "-m",
     "pytest",
-    "backend/tests/runs/test_tasks.py",
+    "tests/runs/test_tasks.py",
     "-q",
+    "--confcutdir=tests/runs",
+    "-k",
+    "not reads_history_and_writes_back",
 ]
 PYTHON_RESOLUTION_COMMAND = [
     sys.executable,
@@ -190,7 +193,7 @@ def _npm_script_exists(repo: Path, script: str) -> bool:
 
 
 def _command_cwd(command: list[str], repo: Path) -> Path:
-    if command == PYTHON_RESOLUTION_COMMAND:
+    if command in (PYTHON_RESOLUTION_COMMAND, PYTHON_RUN_TASKS_COMMAND):
         return repo / "backend"
     if command[0] == NPM_EXECUTABLE:
         return repo / "frontend"

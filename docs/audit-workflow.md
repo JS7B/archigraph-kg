@@ -67,5 +67,7 @@ Backend changes also select the smallest relevant pytest gate. Parsing runs
 `backend/tests/parsing`; extraction runs `backend/tests/extraction`; graph or
 graph-router changes run `backend/tests/graph` and
 `backend/tests/routers/test_graph.py`; ingestion progress changes run
-`backend/tests/runs/test_tasks.py`. These commands use the interpreter that
+the service-free cases in `backend/tests/runs/test_tasks.py` with the runs-local
+fixtures; the existing conversation persistence case remains a separate live-Neo4j
+integration test. These commands use the interpreter that
 started the hook, so Windows does not add a second Conda wrapper.
