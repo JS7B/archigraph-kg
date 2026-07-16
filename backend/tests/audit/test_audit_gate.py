@@ -146,6 +146,28 @@ def test_resolution_paths_select_targeted_backend_gate():
     ]
 
 
+def test_resolution_branch_routes_schema_changes_to_resolution_gate():
+    expected = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "tests/resolution",
+        "-q",
+        "--confcutdir=tests/resolution",
+    ]
+
+    assert commands_for_paths(
+        ["backend/app/graph/schema.py"], branch="feat/kg-resolution"
+    ) == [expected]
+    assert commands_for_paths(
+        [
+            "backend/app/resolution/persistence.py",
+            "backend/app/graph/schema.py",
+        ],
+        branch="feat/kg-resolution",
+    ) == [expected]
+
+
 def test_resolution_gate_runs_from_backend_directory(tmp_path):
     repo = tmp_path / "repo"
     init_repo(repo)
@@ -250,8 +272,8 @@ def test_new_quality_worktree_scopes_block_paths_outside_their_ownership(tmp_pat
         ),
         (
             "feat/kg-resolution",
-            "backend/app/resolution/resolver.py",
-            "backend/app/extraction/models.py",
+            "backend/app/graph/schema.py",
+            "backend/app/graph/search.py",
         ),
         (
             "feat/kg-community-api",

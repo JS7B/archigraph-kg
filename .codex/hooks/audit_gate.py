@@ -104,6 +104,12 @@ BRANCH_SCOPES = {
     "feat/kg-resolution": (
         "backend/app/resolution/",
         "backend/tests/resolution/",
+        "backend/app/extraction/pipeline.py",
+        "backend/tests/extraction/test_contract.py",
+        "backend/app/graph/schema.py",
+        "backend/tests/graph/test_schema.py",
+        "backend/app/runs/tasks.py",
+        "backend/tests/runs/test_tasks.py",
         "backend/DEVLOG.md",
     ),
     "feat/kg-community-api": (
@@ -265,7 +271,7 @@ def audit_repository(
                 f"paths outside {report.branch} scope: {', '.join(out_of_scope)}"
             )
 
-    for command in commands_for_paths(paths):
+    for command in commands_for_paths(paths, branch=report.branch):
         cwd = _command_cwd(command, repo)
         try:
             if (
@@ -293,7 +299,9 @@ def audit_repository(
     return report
 
 
-def commands_for_paths(paths: list[str]) -> list[list[str]]:
+def commands_for_paths(
+    paths: list[str], *, branch: str | None = None
+) -> list[list[str]]:
     commands: list[list[str]] = []
     if any(path.startswith("frontend/") for path in paths):
         commands.extend(FRONTEND_COMMANDS)
@@ -319,19 +327,26 @@ def commands_for_paths(paths: list[str]) -> list[list[str]]:
         for path in paths
     ):
         commands.append(PYTHON_RUN_TASKS_COMMAND)
-    if any(
+    resolution_changed = any(
         path.startswith("backend/app/resolution/")
         or path.startswith("backend/tests/resolution/")
         for path in paths
-    ):
+    )
+    resolution_schema_changed = branch == "feat/kg-resolution" and any(
+        path == "backend/app/graph/schema.py"
+        or path == "backend/tests/graph/test_schema.py"
+        for path in paths
+    )
+    if resolution_changed or resolution_schema_changed:
         commands.append(PYTHON_RESOLUTION_COMMAND)
-    if any(
+    graph_changed = any(
         path.startswith("backend/app/graph/")
         or path.startswith("backend/tests/graph/")
         or path == "backend/app/routers/graph.py"
         or path == "backend/tests/routers/test_graph.py"
         for path in paths
-    ):
+    )
+    if graph_changed and not resolution_schema_changed:
         commands.append(PYTHON_GRAPH_COMMAND)
     return commands
 

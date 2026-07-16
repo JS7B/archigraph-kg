@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-07-16 为规范实体覆盖层扩展分支门禁
+
+- 做了什么：冻结 Wave 2 的 `CanonicalEntity + RESOLVES_TO` 规格，并把 `feat/kg-resolution` 的审计范围扩展到 extraction pipeline、canonical schema 和文档删除的精确接线文件。
+- 这是什么：规范实体覆盖层保留每篇文档自己的源实体，再用一条可解释的接受关系指向跨文档身份；分支门禁则确保工人只能修改这条链路需要的文件。
+- 为什么需要：旧 resolution 只有内存 adapter，若不接入写图、回填和删除，跨文档实体仍然无法被社区层使用；如果门禁仍只允许 resolution 目录，真正的生产接线反而会被阻断。
+- 为什么这么做：graph schema 在 resolution 分支只运行无服务的 resolution 门禁，真实 Neo4j schema/backfill/delete 验证统一留给主仓库，避免新 worktree 因没有 `.env` 在测试收集阶段失败。
+- 踩了什么坑：同一条消歧判断不能克隆成“每个 mention chunk 都是消歧证据”；持久化边只保存一个真实、已由 `MENTIONS` 连接的 evidence chunk，其余来源继续从源图动态查询。
+
+---
+
 ## 2026-07-16 用两个 worktree 并行完成抽取提速与质量基线
 
 - 做了什么：主仓库先冻结 Wave 1 规格和分支门禁，再创建 `feat/kg-extraction`、`feat/kg-evaluation` 两个同级 worktree；工人分别提交有限并行抽取和人工复核质量基线，主窗口逐文件审查、独立复测并按顺序合并。
