@@ -115,6 +115,7 @@ def resolve_source_entities(
     canonicals = overlay.load_canonicals()
     reconstructed_aliases = overlay.load_reconstructed_aliases()
     existing_resolutions = overlay.load_existing_resolutions()
+    affected_old_canonical_ids: set[str] = set()
     validated_aliases = overlay.validate_aliases(aliases)
     resolver = DeterministicResolver(
         canonicals,
@@ -129,6 +130,9 @@ def resolve_source_entities(
         (SourceEntityRecord.model_validate(record) for record in sources),
         key=lambda item: item.entity_id,
     ):
+        existing = existing_resolutions.get(source.entity_id)
+        if existing is not None:
+            affected_old_canonical_ids.add(existing.canonical_id)
         if not source.mention_chunk_ids:
             decision = _unresolved_missing_mention(source)
         else:
@@ -152,7 +156,7 @@ def resolve_source_entities(
                     )
                 )
             decision = _preserve_existing(
-                source, decision, existing_resolutions.get(source.entity_id)
+                source, decision, existing
             )
         overlay.write_decision(source, decision)
         decisions.append(decision)
@@ -163,7 +167,7 @@ def resolve_source_entities(
                 f"({decision.method.value}; candidates={candidates}): {decision.reason}"
             )
 
-    overlay.remove_orphan_canonicals()
+    overlay.remove_orphan_canonicals(affected_old_canonical_ids)
     accepted = sum(item.status is ResolutionStatus.ACCEPTED for item in decisions)
     review = sum(item.status is ResolutionStatus.REVIEW for item in decisions)
     unresolved = sum(item.status is ResolutionStatus.UNRESOLVED for item in decisions)

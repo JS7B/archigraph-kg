@@ -423,4 +423,4 @@
 - 这是什么：规范实体覆盖层不是把原始实体物理合并，而是让每个带文档和 chunk 来源的源实体指向一个稳定的跨文档身份；原有 `MENTIONS`、`RELATES` 和问答链路仍保留在来源层。
 - 为什么需要：同一个概念出现在多篇文档时，文档级 ID 会产生重复节点；直接合并又会破坏引用追溯和按文档删除。覆盖层同时保留了“它来自哪里”和“它与谁是同一个概念”。
 - 为什么这么做：规范 ID 只对既有规范化名称做 SHA-256，实体类型不进入 ID，避免模型类型漂移改变身份；只有真实 `Chunk-[:MENTIONS]->Entity` 证据才能写 accepted 边，模糊匹配和冲突只保存待复核候选；别名必须先验证来源，不能用无出处的字符串映射。
-- 踩了什么坑：一次消歧只能选择一个真实 mention 作为判断证据，不能把同一判断复制到所有 mention 上；重复运行时还要保留原 accepted 边的 method、reason 和 evidence，否则首轮 `bootstrap` 会在第二轮悄悄变成 `exact`。显式 alias 必须先于普通 exact，否则已 bootstrap 的旧拼写永远无法被人工重指。删除查询也不能由必需存在的 Document 驱动；各阶段要用 `OPTIONAL MATCH + collect/FOREACH` 保留一行，才能清掉 Document 已丢失但 Entity 仍残留的半成品状态。
+- 踩了什么坑：一次消歧只能选择一个真实 mention 作为判断证据，不能把同一判断复制到所有 mention 上；重复运行时还要保留原 accepted 边的 method、reason 和 evidence，否则首轮 `bootstrap` 会在第二轮悄悄变成 `exact`。显式 alias 必须先于普通 exact，否则已 bootstrap 的旧拼写永远无法被人工重指。删除查询也不能由必需存在的 Document 驱动；各阶段要用 `OPTIONAL MATCH + collect/FOREACH` 保留一行，才能清掉 Document 已丢失但 Entity 仍残留的半成品状态。日常入库和单文档删除只能清理本次 source 原来指向的 canonical；全库孤儿清理只留给显式 backfill，否则测试或普通操作会顺带改动共享个人图谱。

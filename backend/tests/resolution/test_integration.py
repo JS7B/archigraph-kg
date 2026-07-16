@@ -1,5 +1,4 @@
 from app.graph.schema import ensure_schema
-from app.resolution.backfill import backfill_canonical_overlay
 from app.resolution.identity import canonical_id_for_name
 from app.resolution.models import AliasRecord, ResolutionMethod, SourceEntityRecord
 from app.resolution.persistence import CanonicalOverlayStore
@@ -30,10 +29,43 @@ def _seed_source(driver, document_id, chunk_id, entity_id, name):
     )
 
 
-def test_real_neo4j_backfill_idempotence_and_delete_lifecycle(resolution_neo4j_driver):
+def _seed_unrelated_orphan(driver, suffix):
+    canonical_id = f"canonical:test_resolution_guard:{suffix}"
+    driver.execute_query(
+        """
+        MERGE (canonical:CanonicalEntity {canonical_id: $canonical_id})
+          SET canonical.canonical_name = $canonical_name,
+              canonical.normalized_name = $canonical_name,
+              canonical.entity_type = 'test_guard',
+              canonical.resolution_version = 'v1'
+        """,
+        canonical_id=canonical_id,
+        canonical_name=f"zzqv_unrelated_guard_{suffix}_9847",
+        database_="neo4j",
+    )
+    return canonical_id
+
+
+def _assert_canonical_exists(driver, canonical_id):
+    records, _, _ = driver.execute_query(
+        """
+        MATCH (canonical:CanonicalEntity {canonical_id: $canonical_id})
+        RETURN count(canonical) AS count
+        """,
+        canonical_id=canonical_id,
+        database_="neo4j",
+    )
+    assert records[0]["count"] == 1
+
+
+def test_real_neo4j_resolution_idempotence_and_delete_lifecycle(
+    resolution_neo4j_driver,
+):
     driver = resolution_neo4j_driver
     ensure_schema(driver)
+    unrelated_orphan_id = _seed_unrelated_orphan(driver, "shared")
     shared_name = "test_resolution_shared_concept"
+    sources = []
     for document_id, chunk_id, entity_id, name in (
         (
             "test_resolution_a",
@@ -49,6 +81,16 @@ def test_real_neo4j_backfill_idempotence_and_delete_lifecycle(resolution_neo4j_d
         ),
     ):
         _seed_source(driver, document_id, chunk_id, entity_id, name)
+        sources.append(
+            SourceEntityRecord(
+                entity_id=entity_id,
+                name=name,
+                entity_type="test_type",
+                normalized_name=name.casefold(),
+                document_id=document_id,
+                mention_chunk_ids=[chunk_id],
+            )
+        )
     driver.execute_query(
         """
         MATCH (a:Entity {entity_id: 'test_resolution_a::shared'})
@@ -58,8 +100,11 @@ def test_real_neo4j_backfill_idempotence_and_delete_lifecycle(resolution_neo4j_d
         database_="neo4j",
     )
 
-    first = backfill_canonical_overlay(driver)
-    second = backfill_canonical_overlay(driver)
+    # Shared developer databases may contain arbitrary personal Entity nodes.
+    # Resolve only the test seeds; whole-database backfill is an explicit
+    # operator action and is covered here only through fake-store unit tests.
+    first = resolve_source_entities(driver, sources, fuzzy_threshold=1.0)
+    second = resolve_source_entities(driver, sources, fuzzy_threshold=1.0)
 
     assert first.accepted_count == second.accepted_count == 2
     canonical_id = canonical_id_for_name(shared_name)
@@ -109,6 +154,7 @@ def test_real_neo4j_backfill_idempotence_and_delete_lifecycle(resolution_neo4j_d
         database_="neo4j",
     )
     assert removed[0]["count"] == 0
+    _assert_canonical_exists(driver, unrelated_orphan_id)
 
 
 def test_real_delete_cleans_residual_entity_when_document_is_already_missing(
@@ -116,6 +162,7 @@ def test_real_delete_cleans_residual_entity_when_document_is_already_missing(
 ):
     driver = resolution_neo4j_driver
     ensure_schema(driver)
+    unrelated_orphan_id = _seed_unrelated_orphan(driver, "residual")
     document_id = "test_resolution_residual"
     chunk_id = "test_resolution_residual#0"
     entity_id = "test_resolution_residual::entity"
@@ -129,7 +176,7 @@ def test_real_delete_cleans_residual_entity_when_document_is_already_missing(
         document_id=document_id,
         mention_chunk_ids=[chunk_id],
     )
-    result = resolve_source_entities(driver, [source])
+    result = resolve_source_entities(driver, [source], fuzzy_threshold=1.0)
     canonical_id = result.decisions[0].canonical_id
     driver.execute_query(
         """
@@ -155,6 +202,7 @@ def test_real_delete_cleans_residual_entity_when_document_is_already_missing(
         database_="neo4j",
     )
     assert dict(records[0]) == {"entities": 0, "canonicals": 0}
+    _assert_canonical_exists(driver, unrelated_orphan_id)
 
 
 def test_real_alias_is_reconstructed_then_disappears_with_its_source(
@@ -162,6 +210,7 @@ def test_real_alias_is_reconstructed_then_disappears_with_its_source(
 ):
     driver = resolution_neo4j_driver
     ensure_schema(driver)
+    unrelated_orphan_id = _seed_unrelated_orphan(driver, "alias")
     target_document_id = "test_resolution_alias_target_doc"
     target_chunk_id = "test_resolution_alias_target_doc#0"
     target_entity_id = "test_resolution_alias_target_doc::target"
@@ -264,3 +313,4 @@ def test_real_alias_is_reconstructed_then_disappears_with_its_source(
         database_="neo4j",
     )
     assert kept[0]["count"] == 1
+    _assert_canonical_exists(driver, unrelated_orphan_id)

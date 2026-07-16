@@ -136,7 +136,18 @@ SET source.resolution_status = $status,
 RETURN count(source) AS written
 """
 
-_REMOVE_ORPHANS = """
+_REMOVE_SCOPED_ORPHANS = """
+UNWIND $canonical_ids AS canonical_id
+MATCH (canonical:CanonicalEntity {canonical_id: canonical_id})
+WHERE NOT EXISTS {
+  MATCH (:Entity)-[:RESOLVES_TO]->(canonical)
+}
+WITH collect(DISTINCT canonical) AS canonicals
+FOREACH (canonical IN canonicals | DETACH DELETE canonical)
+RETURN size(canonicals) AS deleted
+"""
+
+_REMOVE_ALL_ORPHANS = """
 MATCH (canonical:CanonicalEntity)
 WHERE NOT EXISTS {
   MATCH (:Entity)-[:RESOLVES_TO]->(canonical)
@@ -248,6 +259,19 @@ class CanonicalOverlayStore:
                 "canonical decision could not match source/document/mention evidence"
             )
 
-    def remove_orphan_canonicals(self) -> int:
-        records = _records(self._execute(_REMOVE_ORPHANS))
+    def remove_orphan_canonicals(self, canonical_ids: Iterable[str]) -> int:
+        """Delete orphan canonicals only within an explicit affected set."""
+
+        ids = sorted(set(canonical_ids))
+        if not ids:
+            return 0
+        records = _records(
+            self._execute(_REMOVE_SCOPED_ORPHANS, canonical_ids=ids)
+        )
+        return int(records[0]["deleted"]) if records else 0
+
+    def remove_all_orphan_canonicals(self) -> int:
+        """Delete every orphan canonical during an explicit full backfill."""
+
+        records = _records(self._execute(_REMOVE_ALL_ORPHANS))
         return int(records[0]["deleted"]) if records else 0
