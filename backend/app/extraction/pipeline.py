@@ -13,6 +13,8 @@ from app.extraction.merge import merge_extractions
 from app.extraction.models import ExtractionStats
 from app.extraction.writer import write_extraction
 from app.parsing.models import ParsedDocument
+from app.resolution.models import SourceEntityRecord
+from app.resolution.service import resolve_source_entities
 
 
 def extract_and_ingest(
@@ -39,6 +41,22 @@ def extract_and_ingest(
     n_ent, n_rel, n_men = write_extraction(
         driver, doc.document_id, merged, database=database
     )
+    resolution = resolve_source_entities(
+        driver,
+        [
+            SourceEntityRecord(
+                entity_id=entity.entity_id,
+                name=entity.name,
+                entity_type=entity.type,
+                normalized_name=entity.normalized_name,
+                document_id=doc.document_id,
+                mention_chunk_ids=entity.mention_chunk_ids,
+            )
+            for entity in merged.entities
+        ],
+        database=database,
+    )
+    diagnostics.extend(resolution.diagnostics)
     return ExtractionStats(
         document_id=doc.document_id,
         entity_count=n_ent,

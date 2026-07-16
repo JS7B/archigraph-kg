@@ -112,3 +112,14 @@ def test_alias_to_unknown_canonical_is_rejected():
 
     with pytest.raises(ValueError, match="unknown canonical_id"):
         resolver.register_alias("Fast API", "canonical:missing")
+
+
+def test_resolver_does_not_infer_document_id_from_entity_id():
+    resolver = _resolver(_canonical("canonical:fastapi", "FastAPI"))
+
+    with pytest.raises(ValueError, match="document id"):
+        resolver.resolve(
+            source_entity_id="misleading-document::fastapi",
+            source_name="FastAPI",
+            source_chunk_id="chunk-1",
+        )

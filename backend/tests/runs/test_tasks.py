@@ -23,6 +23,35 @@ def _fake_answer(*args, **kwargs):
     )
 
 
+def test_do_delete_is_one_query_and_cleans_only_orphan_canonicals():
+    class FakeDriver:
+        def __init__(self):
+            self.calls = []
+
+        def execute_query(self, query, **params):
+            self.calls.append((query, params))
+
+    driver = FakeDriver()
+
+    tasks_mod._do_delete(driver, "doc-a")
+
+    assert len(driver.calls) == 1
+    query, params = driver.calls[0]
+    compact = " ".join(query.split())
+    assert compact.startswith(
+        "OPTIONAL MATCH (d:Document {document_id: $document_id})"
+    )
+    assert "collect(DISTINCT d) AS documents" in compact
+    assert "FOREACH (document IN documents | DETACH DELETE document)" in compact
+    assert "OPTIONAL MATCH (e:Entity {document_id: $document_id})" in compact
+    assert "collect(DISTINCT e) AS entities" in compact
+    assert "FOREACH (entity IN entities | DETACH DELETE entity)" in compact
+    assert "OPTIONAL MATCH (canonical:CanonicalEntity)" in compact
+    assert "NOT EXISTS { MATCH (:Entity)-[:RESOLVES_TO]->(canonical) }" in compact
+    assert "FOREACH (canonical IN canonicals | DETACH DELETE canonical)" in compact
+    assert params == {"document_id": "doc-a", "database_": "neo4j"}
+
+
 @pytest.mark.anyio
 async def test_run_ingest_emits_completed_extractable_progress(monkeypatch):
     doc = ParsedDocument(

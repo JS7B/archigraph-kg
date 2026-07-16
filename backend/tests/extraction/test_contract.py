@@ -1,5 +1,7 @@
 """Public extraction contract and pipeline diagnostics tests."""
 
+from types import SimpleNamespace
+
 from app.extraction import (
     CandidateDecision,
     CandidateStatus,
@@ -14,7 +16,7 @@ from app.extraction import (
     validate_extraction_candidates,
     validate_relation_candidate,
 )
-from app.extraction.models import DocumentExtraction, ExtractionStats
+from app.extraction.models import DocumentExtraction, ExtractionStats, MergedEntity
 from app.extraction import pipeline
 from app.parsing.models import ParsedDocument
 
@@ -56,6 +58,11 @@ def test_pipeline_preserves_merge_diagnostics_in_stats(monkeypatch):
 
     monkeypatch.setattr(pipeline, "merge_extractions", fake_merge)
     monkeypatch.setattr(pipeline, "write_extraction", lambda *args, **kwargs: (0, 0, 0))
+    monkeypatch.setattr(
+        pipeline,
+        "resolve_source_entities",
+        lambda *args, **kwargs: SimpleNamespace(diagnostics=[]),
+    )
 
     stats = pipeline.extract_and_ingest(
         object(),
@@ -86,6 +93,11 @@ def test_pipeline_forwards_extraction_limits_and_progress(monkeypatch):
         lambda *args, **kwargs: DocumentExtraction(),
     )
     monkeypatch.setattr(pipeline, "write_extraction", lambda *args, **kwargs: (0, 0, 0))
+    monkeypatch.setattr(
+        pipeline,
+        "resolve_source_entities",
+        lambda *args, **kwargs: SimpleNamespace(diagnostics=[]),
+    )
 
     pipeline.extract_and_ingest(
         object(),
@@ -106,3 +118,49 @@ def test_pipeline_forwards_extraction_limits_and_progress(monkeypatch):
         "max_workers": 2,
         "on_progress": progress,
     }
+
+
+def test_pipeline_persists_overlay_after_source_graph_and_appends_diagnostics(monkeypatch):
+    calls = []
+    merged = DocumentExtraction(
+        entities=[
+            MergedEntity(
+                entity_id="doc::neo4j",
+                name="Neo4j",
+                type="database",
+                normalized_name="neo4j",
+                mention_chunk_ids=["doc#0", "doc#1"],
+            )
+        ]
+    )
+    monkeypatch.setattr(pipeline, "extract_document", lambda *args, **kwargs: ([], []))
+    monkeypatch.setattr(pipeline, "merge_extractions", lambda *args, **kwargs: merged)
+
+    def fake_write(*args, **kwargs):
+        calls.append("source")
+        return 1, 0, 2
+
+    def fake_resolve(driver, records, **kwargs):
+        calls.append("canonical")
+        record = list(records)[0]
+        assert record.document_id == "doc"
+        assert record.mention_chunk_ids == ["doc#0", "doc#1"]
+        return SimpleNamespace(diagnostics=["resolution summary: accepted=1"])
+
+    monkeypatch.setattr(pipeline, "write_extraction", fake_write)
+    monkeypatch.setattr(pipeline, "resolve_source_entities", fake_resolve)
+
+    stats = pipeline.extract_and_ingest(
+        object(),
+        ParsedDocument(
+            document_id="doc",
+            source_path="doc.txt",
+            doc_type="text",
+            raw_text="",
+            chunks=[],
+        ),
+    )
+
+    assert calls == ["source", "canonical"]
+    assert stats.entity_count == 1
+    assert stats.diagnostics == ["resolution summary: accepted=1"]
