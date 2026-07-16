@@ -320,6 +320,16 @@
 
 验证：真实 Neo4j resolution 生命周期 47 passed；主仓库非 LLM 后端回归 299 passed；评估 42 passed；审计基础设施 31 passed。对现有个人图谱连续执行两次全库 backfill，结果均为 accepted=121 / review=17 / unresolved=0 / bootstrapped=121；源 `Entity` 138、`MENTIONS` 193、`RELATES` 89 的数量与内容指纹前后完全一致。最终 `CanonicalEntity` 121、`RESOLVES_TO` 121，错误标签、规范 RELATES、伪证据、多目标 source、孤儿 canonical 均为 0。
 
+## Wave 3：规范投影与主题社区体验（2026-07-16）
+
+- [x] `feat/kg-community-api`：新增只读 `/api/graph/canonical/*`；严格校验双端 accepted resolution、解析证据、同文档关系证据与双端 `MENTIONS`，按有向规范端点和关系类型聚合支持数与多条来源证据。
+- [x] coverage 精确划分 projected / excluded / collapsed self；`documentId` 与默认 `minConfidence=0.5` 在聚合前过滤，节点、边、alias、evidence、depth 均有硬上限与显式截断。
+- [x] 社区从 connected component 升级为确定性、支持度加权 modularity local-moving；提供稳定 community/edge ID、代表实体、规范搜索和有界 BFS，孤立规范实体不混入默认社区。
+- [x] `feat/graph-experience`：GraphView canonical-only，不再静默回退源图；展示 accepted/review 覆盖、多证据与截断，按社区/中心隔离布局缓存，并修复刷新/社区/局部图竞态与陈旧选择状态。
+- [x] 主窗口逐文件审查并调度独立复审；原代理修正前端请求状态与 overview 截断、收窄 search 参数，并让显式配置错误的 live Neo4j 门禁强制失败。未新增依赖、未推送远端，两个 worktree 与分支已回收。
+
+验证：主仓库后端 314 passed / 4 个显式隔离 URI 用例 skipped，随后空白 Neo4j 强制 live 生命周期 4 passed；评估 42 passed；审计基础设施 31 passed；前端 lint / typecheck / 32 tests / build 通过（保留既有 Cytoscape 异步 chunk 体积警告）。个人图谱实测 121 accepted / 17 review，89 条源关系严格分为 67 projected + 22 excluded + 0 collapsed self；产生 34 个确定性主题社区，重复响应一致，查询前后源图与规范覆盖层指纹一致，规范 `RELATES` 为 0。真实 uvicorn + Vite HTTP 冒烟、CORS 与旧源接口兼容均通过。
+
 ## Review
 
 - 2026-06-16：将项目定位为个人知识图谱 GraphRAG Agent。确认 OpenAI-compatible 调用和 Neo4j 图谱存储，形成初始实现路线。

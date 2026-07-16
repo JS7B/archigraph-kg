@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-07-16 用查询时规范投影完成 Wave 3 图谱体验
+
+- 做了什么：主仓库冻结 canonical projection 规格，调度 `feat/kg-community-api` 与 `feat/graph-experience` 两个同级 worktree 并行实现；双重审查后按后端、前端顺序合并，完成真实 Neo4j、个人图谱与 HTTP 服务验收并回收工作树。
+- 这是什么：查询时规范投影不在数据库复制第二套关系，而是读取源 `RELATES` 与 accepted `RESOLVES_TO`，在请求内聚合为规范边；modularity community 再把稀疏大连通块拆成支持度加权的主题簇。
+- 为什么需要：源实体直接铺满总图会把同一概念、待审核实体和弱证据一起展示；只改前端分组无法解决身份与证据质量问题，必须先在后端明确“哪些事实有资格进入规范图”。
+- 为什么这么做：保留源图作为可追溯事实层，alias 改绑和文档删除无需维护派生边；前端只消费显式 canonical namespace，避免接口失败时静默回退源图。视觉层沿用既有深色 token、键盘焦点和 reduced-motion，不新增设计依赖。
+- 踩了什么坑：worktree 不复制 `.env`，旧 Neo4j 集成测试会因空 URI 在收集阶段失败，主审临时挂载主仓库配置后复验并立即移除；独立审查还发现显式配置的隔离 Neo4j 连接失败会被误记为 skip，修正为“未配置才 skip、配置错误必须 fail”。浏览器控制入口在当前会话不可用，因此最终视觉部分由 32 个 DOM/交互测试覆盖，另用真实 uvicorn + Vite HTTP 冒烟验证端到端服务和 CORS。
+
+---
+
 ## 2026-07-16 为规范实体覆盖层扩展分支门禁
 
 - 做了什么：冻结 Wave 2 的 `CanonicalEntity + RESOLVES_TO` 规格，并把 `feat/kg-resolution` 的审计范围扩展到 extraction pipeline、canonical schema 和文档删除的精确接线文件。

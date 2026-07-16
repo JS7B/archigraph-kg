@@ -114,7 +114,7 @@ Accepted query parameters:
 - `edgeLimit` (1–1000);
 - `evidenceLimit` (1–20);
 - optional `documentId`;
-- optional `minConfidence` (0–1).
+- optional `minConfidence` (0–1, default `0.5`).
 
 The response is an object containing `communities`, `coverage`, and bounded/truncated metadata.
 
@@ -137,7 +137,7 @@ Accepted query parameters:
 - `edgeLimit` (1–200);
 - `evidenceLimit` (1–20);
 - optional `documentId`;
-- optional `minConfidence` (0–1).
+- optional `minConfidence` (0–1, default `0.5`).
 
 Run deterministic, bounded BFS over the read-time projected adjacency. The response contains `centerId`, canonical nodes, aggregated edges, coverage, and metadata including node/edge/evidence limits and `truncated`.
 

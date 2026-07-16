@@ -259,6 +259,10 @@ GET    /api/runs/{run_id}/events/stream
 GET    /api/graph/entities
 GET    /api/graph/entities/{entity_id}/neighbors
 GET    /api/graph/search?q=...
+
+GET    /api/graph/canonical/communities
+GET    /api/graph/canonical/entities/{canonical_id}/subgraph
+GET    /api/graph/canonical/search?q=...
 ```
 
 ## 9. 工程化开发路径
