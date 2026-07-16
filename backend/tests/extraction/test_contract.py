@@ -14,7 +14,7 @@ from app.extraction import (
     validate_extraction_candidates,
     validate_relation_candidate,
 )
-from app.extraction.models import ExtractionStats
+from app.extraction.models import DocumentExtraction, ExtractionStats
 from app.extraction import pipeline
 from app.parsing.models import ParsedDocument
 
@@ -69,3 +69,40 @@ def test_pipeline_preserves_merge_diagnostics_in_stats(monkeypatch):
     )
 
     assert stats.diagnostics == diagnostics
+
+
+def test_pipeline_forwards_extraction_limits_and_progress(monkeypatch):
+    captured = {}
+    progress = lambda completed, total: None
+
+    def fake_extract(doc, **kwargs):
+        captured.update(kwargs)
+        return [], []
+
+    monkeypatch.setattr(pipeline, "extract_document", fake_extract)
+    monkeypatch.setattr(
+        pipeline,
+        "merge_extractions",
+        lambda *args, **kwargs: DocumentExtraction(),
+    )
+    monkeypatch.setattr(pipeline, "write_extraction", lambda *args, **kwargs: (0, 0, 0))
+
+    pipeline.extract_and_ingest(
+        object(),
+        ParsedDocument(
+            document_id="doc",
+            source_path="doc.txt",
+            doc_type="text",
+            raw_text="",
+            chunks=[],
+        ),
+        max_attempts=5,
+        max_workers=2,
+        on_progress=progress,
+    )
+
+    assert captured == {
+        "max_attempts": 5,
+        "max_workers": 2,
+        "on_progress": progress,
+    }
