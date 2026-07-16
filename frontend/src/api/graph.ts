@@ -1,10 +1,14 @@
 import { apiFetch } from './client'
 import type {
+  CanonicalCommunityOverview,
+  CanonicalSubgraph,
   GraphCommunity,
   GraphData,
   GraphEdge,
+  GraphEvidence,
   GraphNode,
   LocalSubgraph,
+  ProjectionCoverage,
 } from '../types'
 
 /**
@@ -105,6 +109,29 @@ export interface SubgraphQuery {
   minConfidence?: number
 }
 
+export interface CanonicalCommunityQuery {
+  limit?: number
+  nodeLimit?: number
+  edgeLimit?: number
+  evidenceLimit?: number
+  documentId?: string
+  minConfidence?: number
+}
+
+export interface CanonicalSubgraphQuery {
+  depth?: number
+  nodeLimit?: number
+  edgeLimit?: number
+  evidenceLimit?: number
+  documentId?: string
+  minConfidence?: number
+}
+
+export interface CanonicalSearchQuery {
+  limit?: number
+  documentId?: string
+}
+
 function boundedInteger(value: number | undefined, fallback: number, max: number): number {
   if (value === undefined || !Number.isFinite(value)) return fallback
   return Math.min(max, Math.max(1, Math.floor(value)))
@@ -112,6 +139,15 @@ function boundedInteger(value: number | undefined, fallback: number, max: number
 
 function appendOptionalParam(params: URLSearchParams, key: string, value: string | undefined) {
   if (value) params.set(key, value)
+}
+
+function appendConfidence(
+  params: URLSearchParams,
+  value: number | undefined,
+) {
+  if (value !== undefined && Number.isFinite(value)) {
+    params.set('minConfidence', String(Math.min(1, Math.max(0, value))))
+  }
 }
 
 /** Fetch bounded connected-component summaries for the local-first graph view. */
@@ -148,6 +184,169 @@ export async function fetchSubgraph(
     edges: raw.edges.map(mapEdge),
     metadata: raw.metadata,
   }
+}
+
+interface RawCanonicalNode {
+  id: string
+  name: string
+  type: string
+  identity: 'canonical'
+  documentIds: string[]
+  sourceEntityCount: number
+  mentionCount: number
+  aliases: string[]
+  aliasCount: number
+  aliasesTruncated: boolean
+  degree: number
+  communityId?: string | null
+}
+
+interface RawCanonicalEvidence {
+  chunkId: string
+  documentId: string
+  sourceEntityId: string
+  targetEntityId: string
+  confidence: number | null
+}
+
+interface RawCanonicalEdge {
+  id: string
+  source: string
+  target: string
+  type: string
+  confidence: number | null
+  supportCount: number
+  evidenceCount: number
+  evidence: RawCanonicalEvidence[]
+  evidenceTruncated: boolean
+}
+
+interface RawCanonicalCommunity {
+  id: string
+  representativeNode: RawCanonicalNode
+  nodeCount: number
+  edgeCount: number
+  totalSupport: number
+  documentIds: string[]
+}
+
+interface RawCanonicalCommunityOverview {
+  communities: RawCanonicalCommunity[]
+  coverage: ProjectionCoverage
+  metadata: CanonicalCommunityOverview['metadata']
+}
+
+interface RawCanonicalSubgraph {
+  centerId: string
+  nodes: RawCanonicalNode[]
+  edges: RawCanonicalEdge[]
+  coverage: ProjectionCoverage
+  metadata: CanonicalSubgraph['metadata']
+}
+
+function mapCanonicalNode(node: RawCanonicalNode): GraphNode {
+  return {
+    id: node.id,
+    label: node.name,
+    entityType: node.type,
+    identity: node.identity,
+    documentIds: node.documentIds,
+    sourceEntityCount: node.sourceEntityCount,
+    mentionCount: node.mentionCount,
+    aliases: node.aliases,
+    aliasCount: node.aliasCount,
+    aliasesTruncated: node.aliasesTruncated,
+    degree: node.degree,
+    ...(node.communityId !== undefined ? { communityId: node.communityId } : {}),
+  }
+}
+
+function mapCanonicalEvidence(evidence: RawCanonicalEvidence): GraphEvidence {
+  return { ...evidence }
+}
+
+function mapCanonicalEdge(edge: RawCanonicalEdge): GraphEdge {
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    relationType: edge.type,
+    confidence: edge.confidence,
+    supportCount: edge.supportCount,
+    evidenceCount: edge.evidenceCount,
+    evidence: edge.evidence.map(mapCanonicalEvidence),
+    evidenceTruncated: edge.evidenceTruncated,
+  }
+}
+
+/** Fetch deterministic topic communities from the accepted canonical projection. */
+export async function fetchCanonicalCommunities(
+  options: CanonicalCommunityQuery = {},
+): Promise<CanonicalCommunityOverview> {
+  const params = new URLSearchParams({
+    limit: String(boundedInteger(options.limit, 20, 100)),
+    nodeLimit: String(boundedInteger(options.nodeLimit, 200, 500)),
+    edgeLimit: String(boundedInteger(options.edgeLimit, 400, 1000)),
+    evidenceLimit: String(boundedInteger(options.evidenceLimit, 20, 20)),
+  })
+  appendOptionalParam(params, 'documentId', options.documentId)
+  appendConfidence(params, options.minConfidence)
+  const raw = await apiFetch<RawCanonicalCommunityOverview>(
+    `/api/graph/canonical/communities?${params.toString()}`,
+  )
+  return {
+    communities: raw.communities.map((item) => ({
+      id: item.id,
+      representativeNode: mapCanonicalNode(item.representativeNode),
+      nodeCount: item.nodeCount,
+      edgeCount: item.edgeCount,
+      totalSupport: item.totalSupport,
+      documentIds: item.documentIds,
+    })),
+    coverage: raw.coverage,
+    metadata: raw.metadata,
+  }
+}
+
+/** Fetch one bounded canonical graph around a canonical center identity. */
+export async function fetchCanonicalSubgraph(
+  canonicalId: string,
+  options: CanonicalSubgraphQuery = {},
+): Promise<CanonicalSubgraph> {
+  const params = new URLSearchParams({
+    depth: String(boundedInteger(options.depth, 1, 4)),
+    nodeLimit: String(boundedInteger(options.nodeLimit, 50, 100)),
+    edgeLimit: String(boundedInteger(options.edgeLimit, 100, 200)),
+    evidenceLimit: String(boundedInteger(options.evidenceLimit, 20, 20)),
+  })
+  appendOptionalParam(params, 'documentId', options.documentId)
+  appendConfidence(params, options.minConfidence)
+  const raw = await apiFetch<RawCanonicalSubgraph>(
+    `/api/graph/canonical/entities/${encodeURIComponent(canonicalId)}/subgraph?${params.toString()}`,
+  )
+  return {
+    centerId: raw.centerId,
+    nodes: raw.nodes.map(mapCanonicalNode),
+    edges: raw.edges.map(mapCanonicalEdge),
+    coverage: raw.coverage,
+    metadata: raw.metadata,
+  }
+}
+
+/** Search canonical names and accepted source aliases in the active evidence scope. */
+export async function searchCanonicalEntities(
+  query: string,
+  options: CanonicalSearchQuery = {},
+): Promise<GraphNode[]> {
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(boundedInteger(options.limit, 20, 100)),
+  })
+  appendOptionalParam(params, 'documentId', options.documentId)
+  const raw = await apiFetch<RawCanonicalNode[]>(
+    `/api/graph/canonical/search?${params.toString()}`,
+  )
+  return raw.map(mapCanonicalNode)
 }
 
 interface RawCommunity {

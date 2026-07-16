@@ -848,3 +848,25 @@
 - 为什么需要：明确的 loading/error/empty 状态能避免空白画布被误认为成功，键盘可达的实体列表和证据字段则让图谱结果可检查、可追溯。
 - 为什么这么做：断言用户可见文本、按钮状态、焦点和请求结果，沿用 Cytoscape 仅在图谱需要时懒加载的方案，避免为测试引入新的 API 或构建配置。
 - 踩了什么坑：Vite build 仍会报告 Cytoscape 独立 chunk 超过 500 kB 的既有警告；这是图谱库体积提示，不影响构建通过，后续再单独评估拆分策略。
+
+## 2026-07-16 规范实体投影与主题社区体验
+
+- 做了什么：把 GraphView 的默认数据源切换为 canonical 专用 API，展示跨文档规范实体、
+  聚合关系的多条来源证据和解析覆盖率；加入请求代次防止旧响应覆盖新社区，成功换图会清理
+  旧详情，Cytoscape 位置按社区分区保存，并补齐错误、空图、404、证据截断和键盘焦点测试。
+- 这是什么：canonical projection 是在读取时把文档级 Entity 经 accepted
+  `RESOLVES_TO` 映射到规范身份，再把相同方向和类型的来源关系聚合起来。它不在 Neo4j
+  中复制一套规范 RELATES，因此别名调整、文档删除后，下次读取会自然反映最新来源事实。
+- 为什么需要：旧图即使先显示“社区”，节点仍是文档级实体，同名知识会重复；聚合后若继续
+  使用单个 documentId 或 evidenceChunkId，又会隐藏跨文档来源。静默回退 source 图和迟到
+  请求反写还会让用户看到身份混杂或标题、画布不一致的状态。
+- 为什么这么做：API 层明确映射 documentIds、supportCount、evidenceCount 与 coverage，
+  页面只消费 canonical namespace，失败时提供重试而不伪造回退。按 ui-ux-pro-max 的状态
+  清晰与可访问性检查，搜索明确标为“当前局部图”，颜色之外同时显示文字计数，保留原生按钮
+  列表和焦点环；布局继续沿用现有暗色 token 与 Cytoscape，不引入新依赖或无关视觉改版。
+- 踩了什么坑：React 19 的 preserve-manual-memoization lint 会核对 useCallback 推导依赖，
+  状态 setter 也要与规则推导保持一致；另外快速社区切换不能简单禁用全部社区按钮，否则
+  generation 防旧响应虽存在却无法被用户触发，最终保留可切换按钮并让最后一次请求获胜。
+  复审还发现 generation 虽能拦住旧数据，却不会自动统一 `loading/loadError` 两套界面状态；
+  局部图接管请求时必须显式结束 overview loading 并清 overview error。社区概览的 truncated
+  也要与局部图 metadata 分开保存，否则一次未截断的 subgraph 会掩盖概览本身的边界。
