@@ -111,8 +111,11 @@ def _entity_recall(system_entities: list, gold_entities: list[dict]) -> tuple[fl
 
 
 def _unmatched_extracted(system_entities: list, gold_entities: list[dict]) -> list[str]:
-    """抽出但未命中任何标注实体的清单（噪声候选）。让「噪声」在报告里可见，
-    弥补只量召回的盲区；不参与召回计算，故与 57.1% 基线可比。"""
+    """抽出但未命中任何标注实体的待复核清单。
+
+    ground truth 只标关键实体，并非穷举标注；未匹配项不能自动算错，也不参与召回
+    或 precision 计算。人工复核后的正负标签由独立质量夹具承载。
+    """
     gold_norm = {_norm(g["name"]) for g in gold_entities}
     return [e.name for e in system_entities if _norm(e.normalized_name) not in gold_norm]
 
@@ -347,7 +350,7 @@ def write_report(results: list, summary: dict, uncited: list) -> None:
         unmatched = r.get("unmatched_extracted") or []
         if unmatched:
             lines.append(
-                f"  - 未匹配抽出实体（噪声候选，共 {len(unmatched)} 个）: "
+                f"  - 未匹配抽出实体（待复核候选，不能直接算噪声，共 {len(unmatched)} 个）: "
                 f"{', '.join(unmatched[:20])}"
             )
         lines.append(f"- 关系可用率: {r.get('relation_usable',0):.1%}")
