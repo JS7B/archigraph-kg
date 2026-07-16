@@ -78,7 +78,8 @@ ORDER BY source_entity_id, source_chunk_id, canonical_id
 
 _LOAD_SOURCES = """
 MATCH (source:Entity)
-OPTIONAL MATCH (evidence:Chunk)-[:MENTIONS]->(source)
+OPTIONAL MATCH (document:Document)-[:HAS_CHUNK]->(evidence:Chunk)-[:MENTIONS]->(source)
+WHERE document.document_id = source.document_id
 RETURN source.entity_id AS entity_id,
        source.name AS name,
        coalesce(source.entity_type, '') AS entity_type,

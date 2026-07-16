@@ -171,6 +171,48 @@ def test_first_time_alias_requires_store_validated_provenance_and_is_reusable():
         service.resolve_source_entities(object(), [source], aliases=[alias], store=invalid)
 
 
+def test_validated_alias_overrides_an_existing_bootstrap_identity():
+    source = _source("doc::postgres", "Postgres", "doc", "chunk")
+    bootstrap_id = canonical_id_for_name(source.name)
+    target_id = canonical_id_for_name("PostgreSQL")
+    alias = AliasRecord(
+        alias=source.name,
+        canonical_id=target_id,
+        source_entity_id=source.entity_id,
+        source_document_id=source.document_id,
+        source_chunk_id="chunk",
+    )
+    store = FakeStore(
+        canonicals=[
+            CanonicalEntityReference(
+                canonical_id=bootstrap_id, canonical_name=source.name
+            ),
+            CanonicalEntityReference(
+                canonical_id=target_id, canonical_name="PostgreSQL"
+            ),
+        ],
+        valid_aliases=[alias],
+        existing={
+            source.entity_id: AcceptedResolutionRecord(
+                source_entity_id=source.entity_id,
+                source_document_id=source.document_id,
+                source_chunk_id="chunk",
+                canonical_id=bootstrap_id,
+                method=ResolutionMethod.BOOTSTRAP,
+                score=1.0,
+                reason="new normalized name bootstrapped deterministically",
+            )
+        },
+    )
+
+    service.resolve_source_entities(object(), [source], aliases=[alias], store=store)
+
+    decision = store.writes[0][1]
+    assert decision.status is ResolutionStatus.ACCEPTED
+    assert decision.method is ResolutionMethod.ALIAS
+    assert decision.canonical_id == target_id
+
+
 def test_alias_collision_keeps_all_targets_for_review():
     aliases = [
         AliasRecord(
@@ -186,6 +228,7 @@ def test_alias_collision_keeps_all_targets_for_review():
         canonicals=[
             CanonicalEntityReference(canonical_id="canonical:z", canonical_name="PostgreSQL"),
             CanonicalEntityReference(canonical_id="canonical:a", canonical_name="Pig"),
+            CanonicalEntityReference(canonical_id="canonical:pg", canonical_name="PG"),
         ],
         aliases=aliases,
     )

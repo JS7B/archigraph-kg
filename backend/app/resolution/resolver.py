@@ -18,7 +18,7 @@ from app.resolution.normalization import normalize_name
 
 
 class DeterministicResolver:
-    """Resolve source mentions using exact keys, aliases, then review-only fuzzy matches."""
+    """Resolve using explicit aliases, exact keys, then review-only fuzzy matches."""
 
     def __init__(
         self,
@@ -131,18 +131,6 @@ class DeterministicResolver:
                 source_entity_id, source_name, source_document_id, source_chunk_id, "empty normalized name"
             )
 
-        exact = self._exact.get(key, set())
-        if exact:
-            return self._from_index(
-                exact,
-                source_entity_id,
-                source_name,
-                source_document_id,
-                source_chunk_id,
-                ResolutionMethod.EXACT,
-                "normalized canonical key matches",
-            )
-
         alias = self._aliases.get(key, set())
         if alias:
             return self._from_index(
@@ -153,6 +141,18 @@ class DeterministicResolver:
                 source_chunk_id,
                 ResolutionMethod.ALIAS,
                 "explicit alias matches",
+            )
+
+        exact = self._exact.get(key, set())
+        if exact:
+            return self._from_index(
+                exact,
+                source_entity_id,
+                source_name,
+                source_document_id,
+                source_chunk_id,
+                ResolutionMethod.EXACT,
+                "normalized canonical key matches",
             )
 
         return self._fuzzy(
@@ -263,7 +263,7 @@ class DeterministicResolver:
                 source_name,
                 source_document_id,
                 source_chunk_id,
-                "no exact, alias, or sufficiently similar canonical name",
+                "no alias, exact, or sufficiently similar canonical name",
             )
         best_score, best_id = scored[0]
         tied = len(scored) > 1 and best_score - scored[1][0] <= self.ambiguity_margin

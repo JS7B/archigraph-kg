@@ -233,20 +233,23 @@ def _do_delete(driver: Driver, document_id: str) -> None:
     """
     driver.execute_query(
         """
-        MATCH (d:Document {document_id: $document_id})
+        OPTIONAL MATCH (d:Document {document_id: $document_id})
         OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk)
-        DETACH DELETE c
-        WITH DISTINCT d
-        DETACH DELETE d
+        WITH collect(DISTINCT d) AS documents,
+             collect(DISTINCT c) AS chunks
+        FOREACH (chunk IN chunks | DETACH DELETE chunk)
+        FOREACH (document IN documents | DETACH DELETE document)
         WITH 1 AS _
-        MATCH (e:Entity {document_id: $document_id})
-        DETACH DELETE e
-        WITH count(*) AS deleted_entities
+        OPTIONAL MATCH (e:Entity {document_id: $document_id})
+        WITH collect(DISTINCT e) AS entities
+        FOREACH (entity IN entities | DETACH DELETE entity)
+        WITH 1 AS _
         OPTIONAL MATCH (canonical:CanonicalEntity)
         WHERE NOT EXISTS {
           MATCH (:Entity)-[:RESOLVES_TO]->(canonical)
         }
-        DETACH DELETE canonical
+        WITH collect(DISTINCT canonical) AS canonicals
+        FOREACH (canonical IN canonicals | DETACH DELETE canonical)
         """,
         document_id=document_id,
         database_="neo4j",

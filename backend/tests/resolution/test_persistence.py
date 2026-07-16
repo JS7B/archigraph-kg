@@ -154,5 +154,10 @@ def test_source_load_query_reads_document_id_property_in_stable_order():
 
     compact = " ".join(driver.calls[0][0].split())
     assert "source.document_id AS document_id" in compact
+    assert (
+        "OPTIONAL MATCH (document:Document)-[:HAS_CHUNK]->"
+        "(evidence:Chunk)-[:MENTIONS]->(source)" in compact
+    )
+    assert "WHERE document.document_id = source.document_id" in compact
     assert "ORDER BY source.entity_id" in compact
     assert "split" not in compact.lower()

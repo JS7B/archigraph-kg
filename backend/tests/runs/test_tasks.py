@@ -38,9 +38,17 @@ def test_do_delete_is_one_query_and_cleans_only_orphan_canonicals():
     assert len(driver.calls) == 1
     query, params = driver.calls[0]
     compact = " ".join(query.split())
-    assert "MATCH (e:Entity {document_id: $document_id})" in compact
+    assert compact.startswith(
+        "OPTIONAL MATCH (d:Document {document_id: $document_id})"
+    )
+    assert "collect(DISTINCT d) AS documents" in compact
+    assert "FOREACH (document IN documents | DETACH DELETE document)" in compact
+    assert "OPTIONAL MATCH (e:Entity {document_id: $document_id})" in compact
+    assert "collect(DISTINCT e) AS entities" in compact
+    assert "FOREACH (entity IN entities | DETACH DELETE entity)" in compact
     assert "OPTIONAL MATCH (canonical:CanonicalEntity)" in compact
     assert "NOT EXISTS { MATCH (:Entity)-[:RESOLVES_TO]->(canonical) }" in compact
+    assert "FOREACH (canonical IN canonicals | DETACH DELETE canonical)" in compact
     assert params == {"document_id": "doc-a", "database_": "neo4j"}
 
 
