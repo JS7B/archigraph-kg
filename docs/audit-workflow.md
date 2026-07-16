@@ -59,7 +59,7 @@ The audit gate keeps each quality worktree on its declared paths:
 - `feat/kg-parsing`: `backend/app/parsing/`, `backend/tests/parsing/`, and `backend/DEVLOG.md`.
 - `feat/kg-extraction`: `backend/app/extraction/`, `backend/tests/extraction/`, the ingestion progress adapter in `backend/app/runs/tasks.py` with its focused test, and `backend/DEVLOG.md`.
 - `feat/kg-evaluation`: `evals/` and `docs/evaluation.md`.
-- `feat/kg-resolution`: resolution modules/tests, the extraction pipeline contract, canonical constraints in graph schema, document-delete cleanup with focused tests, and `backend/DEVLOG.md`. Schema files on this branch are verified by the resolution suite; the main window still runs the live graph/schema regression after merge.
+- `feat/kg-resolution`: resolution modules/tests, the extraction pipeline contract, canonical DDL in graph schema, document-delete cleanup with focused tests, and `backend/DEVLOG.md`. The graph schema implementation is verified from resolution tests; `backend/tests/graph/test_schema.py` remains outside worker scope and the main window runs the live graph/schema regression after merge.
 - `feat/kg-community-api`: graph modules, the graph router and its tests, plus `backend/DEVLOG.md`.
 - `feat/graph-experience`: `frontend/` and `frontend/DEVLOG.md`.
 

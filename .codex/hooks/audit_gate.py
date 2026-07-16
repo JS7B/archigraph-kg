@@ -107,7 +107,6 @@ BRANCH_SCOPES = {
         "backend/app/extraction/pipeline.py",
         "backend/tests/extraction/test_contract.py",
         "backend/app/graph/schema.py",
-        "backend/tests/graph/test_schema.py",
         "backend/app/runs/tasks.py",
         "backend/tests/runs/test_tasks.py",
         "backend/DEVLOG.md",
@@ -334,7 +333,6 @@ def commands_for_paths(
     )
     resolution_schema_changed = branch == "feat/kg-resolution" and any(
         path == "backend/app/graph/schema.py"
-        or path == "backend/tests/graph/test_schema.py"
         for path in paths
     )
     if resolution_changed or resolution_schema_changed:
