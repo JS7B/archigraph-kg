@@ -52,6 +52,13 @@ PYTHON_EXTRACTION_COMMAND = [
     "--ignore=backend/tests/extraction/test_writer.py",
     "--ignore=backend/tests/extraction/test_llm_real.py",
 ]
+PYTHON_RUN_TASKS_COMMAND = [
+    sys.executable,
+    "-m",
+    "pytest",
+    "backend/tests/runs/test_tasks.py",
+    "-q",
+]
 PYTHON_RESOLUTION_COMMAND = [
     sys.executable,
     "-m",
@@ -86,8 +93,11 @@ BRANCH_SCOPES = {
     "feat/kg-extraction": (
         "backend/app/extraction/",
         "backend/tests/extraction/",
+        "backend/app/runs/tasks.py",
+        "backend/tests/runs/test_tasks.py",
         "backend/DEVLOG.md",
     ),
+    "feat/kg-evaluation": ("evals/", "docs/evaluation.md"),
     "feat/kg-resolution": (
         "backend/app/resolution/",
         "backend/tests/resolution/",
@@ -300,6 +310,12 @@ def commands_for_paths(paths: list[str]) -> list[list[str]]:
         for path in paths
     ):
         commands.append(PYTHON_EXTRACTION_COMMAND)
+    if any(
+        path == "backend/app/runs/tasks.py"
+        or path == "backend/tests/runs/test_tasks.py"
+        for path in paths
+    ):
+        commands.append(PYTHON_RUN_TASKS_COMMAND)
     if any(
         path.startswith("backend/app/resolution/")
         or path.startswith("backend/tests/resolution/")

@@ -87,6 +87,19 @@ def test_extraction_paths_select_targeted_backend_gate():
     ]
 
 
+def test_run_task_paths_select_targeted_backend_gate():
+    expected = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "backend/tests/runs/test_tasks.py",
+        "-q",
+    ]
+
+    assert commands_for_paths(["backend/app/runs/tasks.py"]) == [expected]
+    assert commands_for_paths(["backend/tests/runs/test_tasks.py"]) == [expected]
+
+
 def test_resolution_paths_select_targeted_backend_gate():
     expected = [
         sys.executable,
@@ -197,8 +210,13 @@ def test_new_quality_worktree_scopes_block_paths_outside_their_ownership(tmp_pat
         ),
         (
             "feat/kg-extraction",
-            "backend/app/extraction/models.py",
+            "backend/app/runs/tasks.py",
             "backend/app/parsing/models.py",
+        ),
+        (
+            "feat/kg-evaluation",
+            "evals/metrics.py",
+            "backend/app/extraction/models.py",
         ),
         (
             "feat/kg-resolution",
