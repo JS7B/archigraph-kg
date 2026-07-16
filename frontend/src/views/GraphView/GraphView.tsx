@@ -2,14 +2,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import cytoscape from 'cytoscape'
 import type { ElementDefinition } from 'cytoscape'
 import fcose from 'cytoscape-fcose'
-import { Button, Card, Chip, DataValue, Eyebrow, Panel } from '../../components/ui'
 import { ApiError } from '../../api/client'
-import { fetchCommunities, fetchGraph, fetchSubgraph } from '../../api/graph'
-import type { GraphCommunity, GraphData, GraphEdge, GraphNode } from '../../types'
+import {
+  fetchCanonicalCommunities,
+  fetchCanonicalSubgraph,
+} from '../../api/graph'
+import { Button, Card, Chip, DataValue, Eyebrow, Panel } from '../../components/ui'
+import type {
+  CanonicalSubgraphMetadata,
+  GraphCommunity,
+  GraphData,
+  GraphEdge,
+  GraphNode,
+  ProjectionCoverage,
+} from '../../types'
 import { edgeConfidenceClass, fallbackPosition, nodeVisualClasses } from './graphVisuals'
 import styles from './GraphView.module.css'
 
-// 注册 fcose 布局（大图布局质量明显优于内置 cose）。模块级注册一次即可。
 cytoscape.use(fcose)
 
 interface NodeRelation {
@@ -18,8 +27,8 @@ interface NodeRelation {
   direction: 'outgoing' | 'incoming'
 }
 
-// 节点度数：后端 degree 字段优先，未就绪时用 edges 本地计数兜底。
-// 这是「后端字段到位后一处切换」的唯一位置——?? 一旦拿到 degree 即自动改用。
+type Position = { x: number; y: number }
+
 function nodeDegree(node: GraphNode, edges: GraphEdge[]): number {
   if (typeof node.degree === 'number') return node.degree
   return edges.reduce(
@@ -28,8 +37,8 @@ function nodeDegree(node: GraphNode, edges: GraphEdge[]): number {
   )
 }
 
-// 度数分档（3 可见档 + 孤立档，不做连续插值）：驱动节点尺寸与颜色深浅。
 type DegreeTier = 'iso' | 'low' | 'mid' | 'hi'
+
 function degreeTier(degree: number): DegreeTier {
   if (degree === 0) return 'iso'
   if (degree <= 2) return 'low'
@@ -37,7 +46,6 @@ function degreeTier(degree: number): DegreeTier {
   return 'hi'
 }
 
-// 关系查找：接受 graphData 参数（替代旧的模块级 mockGraph 依赖）。
 function findGraphNode(graph: GraphData, nodeId: string): GraphNode | null {
   return graph.nodes.find((node) => node.id === nodeId) ?? null
 }
@@ -56,27 +64,24 @@ function getNodeRelations(graph: GraphData, nodeId: string): NodeRelation[] {
   }, [])
 }
 
-function edgeDocumentId(edge: GraphEdge, graph: GraphData): string | null {
-  const source = findGraphNode(graph, edge.source)?.documentId
-  const target = findGraphNode(graph, edge.target)?.documentId
-  if (source) return source
-  if (target) return target
-  return edge.evidenceChunkId?.split('#')[0] || null
+function requestMessage(error: unknown, fallback: string): string {
+  return error instanceof ApiError ? error.message : fallback
+}
+
+function communityScope(community: GraphCommunity | null, centerId: string): string {
+  return `canonical:${community?.id ?? `center:${centerId}`}`
 }
 
 const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
   {
     selector: 'node',
     style: {
-      // --color-accent: #6366f1; Cytoscape canvas styles cannot read CSS variables.
       'background-color': '#6366f1',
-      // --color-on-accent: #ffffff.
       color: '#ffffff',
       label: 'data(label)',
       width: 58,
       height: 58,
       'border-width': 2,
-      // --color-accent-border: #c7d2fe.
       'border-color': '#c7d2fe',
       'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       'font-size': 10,
@@ -86,7 +91,6 @@ const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
       'text-valign': 'center',
       'text-halign': 'center',
       'text-outline-width': 1,
-      // --color-accent-active: #4338ca.
       'text-outline-color': '#4338ca',
       'overlay-opacity': 0,
     },
@@ -96,17 +100,15 @@ const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
     style: {
       label: 'data(label)',
       width: 2,
-      // --color-border-strong: #cbd5e1.
       'line-color': '#cbd5e1',
       'target-arrow-shape': 'triangle',
       'target-arrow-color': '#cbd5e1',
       'curve-style': 'bezier',
-      // --color-text-muted: #64748b.
       color: '#64748b',
       'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       'font-size': 9,
       'font-weight': 'bold',
-      'text-background-color': '#ffffff', // --color-surface: #ffffff.
+      'text-background-color': '#ffffff',
       'text-background-opacity': 0.9,
       'text-background-padding': '3px',
       'text-background-shape': 'roundrectangle',
@@ -114,46 +116,14 @@ const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
       'overlay-opacity': 0,
     },
   },
-  {
-    selector: 'node.type-library',
-    style: { 'background-color': '#0f766e' },
-  },
-  {
-    selector: 'node.type-person',
-    style: { 'background-color': '#b45309' },
-  },
-  {
-    selector: 'node.type-organization',
-    style: { 'background-color': '#0369a1' },
-  },
-  {
-    selector: 'node.type-unknown',
-    style: { 'background-color': '#64748b' },
-  },
-  {
-    selector: 'node.community-local',
-    style: { 'border-color': '#c7d2fe' },
-  },
-  {
-    selector: 'node.community-unknown',
-    style: { 'border-color': '#cbd5e1' },
-  },
-  {
-    selector: 'node.community-palette-0',
-    style: { 'border-color': '#c7d2fe' },
-  },
-  {
-    selector: 'node.community-palette-1',
-    style: { 'border-color': '#99f6e4' },
-  },
-  {
-    selector: 'node.community-palette-2',
-    style: { 'border-color': '#fed7aa' },
-  },
-  {
-    selector: 'node.community-palette-3',
-    style: { 'border-color': '#bae6fd' },
-  },
+  { selector: 'node.type-library', style: { 'background-color': '#0f766e' } },
+  { selector: 'node.type-person', style: { 'background-color': '#b45309' } },
+  { selector: 'node.type-organization', style: { 'background-color': '#0369a1' } },
+  { selector: 'node.type-unknown', style: { 'background-color': '#64748b' } },
+  { selector: 'node.community-palette-0', style: { 'border-color': '#c7d2fe' } },
+  { selector: 'node.community-palette-1', style: { 'border-color': '#99f6e4' } },
+  { selector: 'node.community-palette-2', style: { 'border-color': '#fed7aa' } },
+  { selector: 'node.community-palette-3', style: { 'border-color': '#bae6fd' } },
   {
     selector: 'edge.confidence-high',
     style: { width: 3, 'line-color': '#16a34a', 'target-arrow-color': '#16a34a' },
@@ -175,11 +145,10 @@ const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
     selector: 'edge.confidence-unknown',
     style: { width: 1, 'line-color': '#cbd5e1', 'target-arrow-color': '#cbd5e1' },
   },
-  // 度数分档：孤立=灰小（噪声观感）→ 高度数=深大（核心突出）。颜色为靛紫由浅到深。
   {
     selector: 'node.deg-iso',
     style: {
-      'background-color': '#cbd5e1', // --color-border-strong（灰，弱化噪声点）
+      'background-color': '#cbd5e1',
       'border-color': '#e2e8f0',
       width: 34,
       height: 34,
@@ -188,24 +157,16 @@ const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
   },
   {
     selector: 'node.deg-low',
-    style: {
-      'background-color': '#a5b4fc', // 靛紫 300
-      width: 46,
-      height: 46,
-    },
+    style: { 'background-color': '#a5b4fc', width: 46, height: 46 },
   },
   {
     selector: 'node.deg-mid',
-    style: {
-      'background-color': '#6366f1', // --color-accent
-      width: 60,
-      height: 60,
-    },
+    style: { 'background-color': '#6366f1', width: 60, height: 60 },
   },
   {
     selector: 'node.deg-hi',
     style: {
-      'background-color': '#4338ca', // --color-accent-active（最深，核心实体）
+      'background-color': '#4338ca',
       'border-color': '#e0e7ff',
       width: 78,
       height: 78,
@@ -215,108 +176,171 @@ const cytoscapeStylesheet: NonNullable<cytoscape.CytoscapeOptions['style']> = [
   {
     selector: 'node:selected',
     style: {
-      // --color-accent-active: #4338ca.
       'background-color': '#4338ca',
       'border-width': 5,
-      // --color-accent-softer: #e0e7ff.
       'border-color': '#e0e7ff',
     },
   },
   {
     selector: '.searchMatch',
     style: {
-      // --color-accent-active: #4338ca.
       'background-color': '#4338ca',
       'border-width': 5,
-      // --color-warning-soft: #fef3c7.
       'border-color': '#fef3c7',
     },
   },
-  {
-    selector: '.searchDimmed',
-    style: {
-      opacity: 0.22,
-    },
-  },
+  { selector: '.searchDimmed', style: { opacity: 0.22 } },
 ]
 
 export function GraphView() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const cyRef = useRef<cytoscape.Core | null>(null)
-  const layoutPositionsRef = useRef(new Map<string, { x: number; y: number }>())
+  const requestGenerationRef = useRef(0)
+  const positionsByScopeRef = useRef(new Map<string, Map<string, Position>>())
   const entityButtonRefs = useRef(new Map<string, HTMLButtonElement>())
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [communities, setCommunities] = useState<GraphCommunity[]>([])
+  const [coverage, setCoverage] = useState<ProjectionCoverage | null>(null)
+  const [graphMetadata, setGraphMetadata] = useState<CanonicalSubgraphMetadata | null>(null)
   const [selectedCommunity, setSelectedCommunity] = useState<GraphCommunity | null>(null)
   const [centerNodeId, setCenterNodeId] = useState<string | null>(null)
+  const [layoutScopeKey, setLayoutScopeKey] = useState('canonical:empty')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [subgraphLoading, setSubgraphLoading] = useState(false)
   const [subgraphError, setSubgraphError] = useState<string | null>(null)
-  const [usingFallback, setUsingFallback] = useState(false)
+  const [failedSubgraphRequest, setFailedSubgraphRequest] = useState<{
+    nodeId: string
+    community: GraphCommunity | null
+  } | null>(null)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
-  // 隐藏孤立节点（度数为 0），默认开：孤立点是噪声观感主源，一键切回全貌。不持久化。
   const [hideIsolated, setHideIsolated] = useState(true)
 
-  const loadSubgraph = useCallback(
-    async (nodeId: string, community: GraphCommunity | null = null) => {
-      setSubgraphLoading(true)
-      setSubgraphError(null)
-      setCenterNodeId(nodeId)
-      if (community) setSelectedCommunity(community)
-      try {
-        const data = await fetchSubgraph(nodeId)
-        setGraphData(data)
-        setSelectedNode(community ? null : findGraphNode(data, data.centerId))
-      } catch (err) {
-        const msg = err instanceof ApiError ? err.message : '局部图加载失败，请稍后重试'
-        setSubgraphError(msg)
-      } finally {
-        setSubgraphLoading(false)
-      }
+  const applyGraphReplacement = useCallback(
+    (data: GraphData & {
+      centerId: string
+      coverage: ProjectionCoverage
+      metadata: CanonicalSubgraphMetadata
+    }, community: GraphCommunity | null) => {
+      setGraphData({ nodes: data.nodes, edges: data.edges })
+      setCoverage(data.coverage)
+      setGraphMetadata(data.metadata)
+      setCenterNodeId(data.centerId)
+      setSelectedCommunity(community)
+      setLayoutScopeKey(communityScope(community, data.centerId))
+      setSelectedNode(null)
+      setSelectedEdge(null)
+      setSearchTerm('')
+      setFailedSubgraphRequest(null)
     },
-    [setCenterNodeId, setGraphData, setSelectedCommunity, setSelectedNode, setSubgraphError, setSubgraphLoading],
+    [
+      setCenterNodeId,
+      setCoverage,
+      setFailedSubgraphRequest,
+      setGraphData,
+      setGraphMetadata,
+      setLayoutScopeKey,
+      setSearchTerm,
+      setSelectedCommunity,
+      setSelectedEdge,
+      setSelectedNode,
+    ],
   )
 
-  // Prefer bounded community/local data, but retain the existing entities API as a fallback.
+  const loadSubgraph = useCallback(
+    async (nodeId: string, community: GraphCommunity | null) => {
+      const generation = ++requestGenerationRef.current
+      setSubgraphLoading(true)
+      setSubgraphError(null)
+      setFailedSubgraphRequest(null)
+      try {
+        const data = await fetchCanonicalSubgraph(nodeId)
+        if (generation !== requestGenerationRef.current) return
+        applyGraphReplacement(data, community)
+      } catch (error) {
+        if (generation !== requestGenerationRef.current) return
+        setSubgraphError(requestMessage(error, '规范局部图加载失败，请稍后重试'))
+        setFailedSubgraphRequest({ nodeId, community })
+      } finally {
+        if (generation === requestGenerationRef.current) setSubgraphLoading(false)
+      }
+    },
+    [
+      applyGraphReplacement,
+      setFailedSubgraphRequest,
+      setSubgraphError,
+      setSubgraphLoading,
+    ],
+  )
+
   const refresh = useCallback(async () => {
+    const generation = ++requestGenerationRef.current
     setLoading(true)
     setLoadError(null)
     setSubgraphError(null)
+    setFailedSubgraphRequest(null)
+    setSubgraphLoading(false)
     try {
-      const available = await fetchCommunities()
-      setCommunities(available)
-      if (available.length > 0) {
-        setUsingFallback(false)
-        await loadSubgraph(available[0].representativeNode.id, available[0])
+      const overview = await fetchCanonicalCommunities()
+      if (generation !== requestGenerationRef.current) return
+      setCommunities(overview.communities)
+      setCoverage(overview.coverage)
+      if (overview.communities.length === 0) {
+        setGraphData({ nodes: [], edges: [] })
+        setGraphMetadata(null)
+        setSelectedCommunity(null)
+        setCenterNodeId(null)
+        setSelectedNode(null)
+        setSelectedEdge(null)
+        setSearchTerm('')
+        setLayoutScopeKey('canonical:empty')
         return
       }
-      setUsingFallback(true)
-      setGraphData(await fetchGraph())
-    } catch (err) {
-      try {
-        setUsingFallback(true)
-        setGraphData(await fetchGraph())
-      } catch (fallbackErr) {
-        const source = fallbackErr instanceof ApiError ? fallbackErr : err
-        const msg = source instanceof ApiError ? source.message : '请求失败，请确认后端已启动'
-        setLoadError(msg)
-      }
+
+      const firstCommunity = overview.communities[0]
+      setSubgraphLoading(true)
+      const data = await fetchCanonicalSubgraph(firstCommunity.representativeNode.id)
+      if (generation !== requestGenerationRef.current) return
+      applyGraphReplacement(data, firstCommunity)
+    } catch (error) {
+      if (generation !== requestGenerationRef.current) return
+      setLoadError(requestMessage(error, '规范图请求失败，请确认后端已启动'))
     } finally {
-      setLoading(false)
+      if (generation === requestGenerationRef.current) {
+        setLoading(false)
+        setSubgraphLoading(false)
+      }
     }
-  }, [loadSubgraph])
+  }, [
+    applyGraphReplacement,
+    setCenterNodeId,
+    setCommunities,
+    setCoverage,
+    setFailedSubgraphRequest,
+    setGraphData,
+    setGraphMetadata,
+    setLayoutScopeKey,
+    setLoadError,
+    setLoading,
+    setSearchTerm,
+    setSelectedCommunity,
+    setSelectedEdge,
+    setSelectedNode,
+    setSubgraphError,
+    setSubgraphLoading,
+  ])
 
   useEffect(() => {
-    // The initial request drives the local-first loading lifecycle.
+    // The initial canonical request owns the graph loading lifecycle.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh()
+    return () => {
+      requestGenerationRef.current += 1
+    }
   }, [refresh])
 
-  // Cytoscape elements 由 graphData 派生：附度数分档 class；隐藏孤立时滤掉度数 0 的点
-  // 及其悬挂边（两端都需可见）。
   const graphElements: ElementDefinition[] = useMemo(() => {
     if (!graphData) return []
     const withDegree = graphData.nodes.map((node) => ({
@@ -325,11 +349,14 @@ export function GraphView() {
     }))
     const visibleNodes = hideIsolated ? withDegree.filter(({ degree }) => degree > 0) : withDegree
     const visibleIds = new Set(visibleNodes.map(({ node }) => node.id))
+    // Reading saved positions during render is intentional: they are immutable
+    // for this render and are written only by the Cytoscape lifecycle below.
+    // eslint-disable-next-line react-hooks/refs
+    const savedPositions = positionsByScopeRef.current.get(layoutScopeKey)
     return [
-      // eslint-disable-next-line react-hooks/refs
       ...visibleNodes.map(({ node, degree }, index) => ({
         data: { id: node.id, label: node.label, degree },
-        position: layoutPositionsRef.current.get(node.id) ?? fallbackPosition(node.id, index),
+        position: savedPositions?.get(node.id) ?? fallbackPosition(node.id, index),
         classes: `deg-${degreeTier(degree)} ${nodeVisualClasses(node, selectedCommunity?.id)}`,
       })),
       ...graphData.edges
@@ -341,64 +368,72 @@ export function GraphView() {
             target: edge.target,
             label: edge.relationType,
             confidence: edge.confidence,
+            supportCount: edge.supportCount,
           },
           classes: edgeConfidenceClass(edge.confidence),
         })),
     ]
-  }, [graphData, hideIsolated, selectedCommunity])
+  }, [graphData, hideIsolated, layoutScopeKey, selectedCommunity])
 
-  // 实体列表按度数降序（核心实体置顶）；带度数供列表展示。列表始终含全部节点
-  // （键盘可达路径不因隐藏孤立点而丢失，孤立点自然沉到列表末尾）。
   const rankedNodes = useMemo(() => {
     if (!graphData) return []
     return graphData.nodes
       .map((node) => ({ node, degree: nodeDegree(node, graphData.edges) }))
-      .sort((a, b) => b.degree - a.degree)
+      .sort(
+        (left, right) =>
+          right.degree - left.degree ||
+          (right.node.sourceEntityCount ?? 0) - (left.node.sourceEntityCount ?? 0) ||
+          left.node.id.localeCompare(right.node.id),
+      )
   }, [graphData])
 
   const selectedRelations = useMemo(
     () => (selectedNode && graphData ? getNodeRelations(graphData, selectedNode.id) : []),
     [selectedNode, graphData],
   )
-  const selectedGraphData = graphData ?? { nodes: [], edges: [] }
 
   useEffect(() => {
     if (!selectedNode) return
     entityButtonRefs.current.get(selectedNode.id)?.focus()
   }, [selectedNode])
 
-  // Cytoscape 实例：依赖 graphData，数据到位（或变化）后（重新）构建。
   useEffect(() => {
-    if (!containerRef.current || !graphData) return
+    if (!containerRef.current || !graphData || graphElements.length === 0) return
 
-    const positions = layoutPositionsRef.current
+    let positions = positionsByScopeRef.current.get(layoutScopeKey)
+    if (!positions) {
+      positions = new Map<string, Position>()
+      positionsByScopeRef.current.set(layoutScopeKey, positions)
+    }
     const hasStablePositions = positions.size > 0
-
     const cy = cytoscape({
       container: containerRef.current,
       elements: graphElements,
       style: cytoscapeStylesheet,
-      layout: {
-        name: 'fcose',
-        quality: 'proof',
-        animate: false,
-        randomize: !hasStablePositions,
-        fit: true,
-        padding: 48,
-        nodeSeparation: 120,
-        idealEdgeLength: 110,
-        nodeRepulsion: 8000,
-      } as unknown as cytoscape.LayoutOptions,
+      layout: hasStablePositions
+        ? {
+            name: 'preset',
+            fit: true,
+            padding: 48,
+          }
+        : ({
+            name: 'fcose',
+            quality: 'proof',
+            animate: false,
+            randomize: true,
+            fit: true,
+            padding: 48,
+            nodeSeparation: 120,
+            idealEdgeLength: 110,
+            nodeRepulsion: 8000,
+          } as unknown as cytoscape.LayoutOptions),
       minZoom: 0.55,
       maxZoom: 2.2,
       wheelSensitivity: 0.15,
     })
 
-    // 容器可能因视图常驻（hidden）而尺寸为 0，渲染后立即 resize + fit 兜底，
-    // 避免图谱在可见时却显示空白。
     cy.resize()
     cy.fit(undefined, 48)
-
     cyRef.current = cy
 
     cy.nodes().forEach((node) => {
@@ -413,16 +448,17 @@ export function GraphView() {
       setSelectedNode(findGraphNode(graphData, nodeId))
       setSelectedEdge(null)
     })
-
     cy.on('tap', 'edge', (event) => {
       const edgeId = event.target.id()
       const edge = graphData.edges.find((candidate) => candidate.id === edgeId) ?? null
       setSelectedEdge(edge)
       if (edge) setSelectedNode(findGraphNode(graphData, edge.source))
     })
-
     cy.on('tap', (event) => {
-      if (event.target === cy) setSelectedNode(null)
+      if (event.target === cy) {
+        setSelectedNode(null)
+        setSelectedEdge(null)
+      }
     })
 
     return () => {
@@ -435,11 +471,8 @@ export function GraphView() {
       cy.destroy()
       cyRef.current = null
     }
-    // graphElements 由 graphData/hideIsolated 派生，二者变化即重建并重新布局。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphData, hideIsolated])
+  }, [graphData, graphElements, layoutScopeKey])
 
-  // 搜索高亮：仍在已渲染的 Cytoscape 实例上做前端 filter（体验好，不发请求）。
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
@@ -447,135 +480,190 @@ export function GraphView() {
     const normalizedSearch = searchTerm.trim().toLocaleLowerCase()
     const nodes = cy.nodes()
     const edges = cy.edges()
-
     nodes.removeClass('searchMatch searchDimmed')
     edges.removeClass('searchDimmed')
-
     if (!normalizedSearch) return
 
     const matchingNodes = nodes.filter((node) => {
       const label = String(node.data('label') ?? '').toLocaleLowerCase()
       return label.includes(normalizedSearch)
     })
-
     nodes.not(matchingNodes).addClass('searchDimmed')
     edges.addClass('searchDimmed')
     matchingNodes.addClass('searchMatch')
     matchingNodes.connectedEdges().removeClass('searchDimmed')
-    // 依赖含 graphData/hideIsolated：cy 实例随二者重建后，本 effect 重跑复算高亮，
-    // 否则切换「隐藏孤立节点」重建实例会丢掉搜索高亮（搜索框却仍有词）。
-  }, [searchTerm, graphData, hideIsolated])
+  }, [searchTerm, graphData, hideIsolated, layoutScopeKey])
 
-  const isEmpty = !loading && !loadError && graphData && graphData.nodes.length === 0
-
-  // 当前画布可见节点数（隐藏孤立时 = 度数 > 0 的节点数）。用于"全被隐藏"的空态提示。
   const visibleNodeCount = useMemo(() => {
     if (!graphData) return 0
     if (!hideIsolated) return graphData.nodes.length
     return graphData.nodes.filter((node) => nodeDegree(node, graphData.edges) > 0).length
   }, [graphData, hideIsolated])
 
-  // 有实体、但当前可见节点为 0（全孤立且开关开着）：画布会空白，需给出解释而非静默。
+  const isEmpty =
+    !loading && !loadError && !!graphData && graphData.nodes.length === 0
   const allHidden =
-    !loading && !loadError && !!graphData && graphData.nodes.length > 0 && visibleNodeCount === 0
+    !loading &&
+    !loadError &&
+    !!graphData &&
+    graphData.nodes.length > 0 &&
+    visibleNodeCount === 0
+  const isBusy = loading || subgraphLoading
 
   return (
     <section className={styles.graphView}>
       <header className={styles.header}>
         <div className={styles.heading}>
-          <Eyebrow>Knowledge Graph</Eyebrow>
-          <h1 className={styles.title}>图谱探索</h1>
+          <Eyebrow>Canonical Knowledge Graph</Eyebrow>
+          <h1 className={styles.title}>规范图谱探索</h1>
           <p className={styles.subtitle}>
-            从知识库的实体与关系中探索，点击节点查看详情，输入名称高亮匹配。
+            相同知识在不同文档中的来源实体会汇聚为规范实体；关系仍保留每条来源证据。
           </p>
         </div>
       </header>
 
-      <div className={styles.canvasShell} aria-label="知识图谱画布">
-        {loading && (
+      <div className={styles.canvasShell} aria-label="规范知识图谱画布">
+        {loading && !loadError && (
           <div
             className={styles.statusMsg}
             role="status"
             aria-label={subgraphLoading ? 'graph-subgraph-loading' : 'graph-loading'}
           >
-            {subgraphLoading ? '加载局部图中…' : '加载图谱中…'}
+            {subgraphLoading ? '正在加载规范局部图…' : '正在加载规范图…'}
           </div>
         )}
         {!loading && subgraphLoading && (
           <div className={styles.statusMsg} role="status" aria-label="graph-subgraph-loading">
-            加载局部图中…
+            正在加载规范局部图…
           </div>
         )}
-        {loadError && <div className={styles.statusMsg} role="status" aria-label="graph-error">加载失败：{loadError}</div>}
+        {loadError && (
+          <div className={styles.statusMsg} role="alert" aria-label="graph-error">
+            <div className={styles.statusPanel}>
+              <span>规范图加载失败：{loadError}</span>
+              <Button size="sm" variant="ghost" onClick={() => void refresh()}>
+                重试加载规范图
+              </Button>
+            </div>
+          </div>
+        )}
         {subgraphError && (
-          <div className={styles.statusMsg} role="status" aria-label="graph-subgraph-error">
-            局部图加载失败：{subgraphError}
+          <div className={styles.statusMsg} role="alert" aria-label="graph-subgraph-error">
+            <div className={styles.statusPanel}>
+              <span>规范局部图加载失败：{subgraphError}</span>
+              {failedSubgraphRequest && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    void loadSubgraph(
+                      failedSubgraphRequest.nodeId,
+                      failedSubgraphRequest.community,
+                    )
+                  }
+                >
+                  重试该局部图
+                </Button>
+              )}
+            </div>
           </div>
         )}
         {isEmpty && (
           <div className={styles.statusMsg} role="status" aria-label="graph-empty">
-            知识库还没有实体。上传文档并完成入库后，这里会显示实体与关系。
+            {coverage && coverage.acceptedSourceEntityCount > 0
+              ? '规范图目前没有可展示的关系社区；孤立规范实体不进入默认社区。'
+              : '还没有可展示的规范实体。完成文档入库与实体解析后，这里会出现主题社区。'}
           </div>
         )}
-        {/* 全部实体都是孤立点、被默认隐藏：画布会空白，给出提示而非静默空白 */}
         {allHidden && (
           <div className={styles.statusMsg}>
-            {graphData!.nodes.length} 个实体当前都是孤立点（无关系连边），已按「隐藏孤立节点」默认隐藏。
-            关闭右侧开关可查看全部。
+            当前局部图的节点都是孤立节点。关闭右侧“隐藏孤立节点”可查看。
           </div>
         )}
-        {/* 数据就绪且有可见节点才挂载 Cytoscape 容器，避免空容器闪烁 */}
         {!loading && !loadError && visibleNodeCount > 0 && (
           <>
             <div ref={containerRef} className={styles.canvas} />
-            <div className={styles.canvasNote}>拖拽移动画布，滚轮缩放，点击节点查看详情。</div>
+            <div className={styles.canvasNote}>
+              拖拽移动画布，滚轮缩放，点击节点查看规范身份与来源。
+            </div>
           </>
         )}
       </div>
 
-      {/* 右侧边栏：实体搜索 + 实体详情垂直一列，跨两行贴顶 */}
       <aside className={styles.sidebar}>
         <Card className={styles.searchCard} padding="md">
           <div className={styles.searchRow}>
             <label className={styles.searchLabel}>
-              <span className={styles.searchCaption}>实体搜索</span>
+              <span className={styles.searchCaption}>当前局部图搜索</span>
               <input
+                aria-label="当前局部图搜索"
                 className={styles.searchInput}
                 type="search"
                 inputMode="search"
                 enterKeyHint="search"
                 value={searchTerm}
-                placeholder="搜索实体…"
+                placeholder="高亮当前图中的实体…"
                 onChange={(event) => setSearchTerm(event.target.value)}
               />
             </label>
-            {/* 刷新是低频次要操作，用 ghost 避免与搜索主任务抢视觉焦点 */}
             <Button
               variant="ghost"
-              disabled={loading}
+              disabled={isBusy}
               onClick={() => void refresh()}
-              aria-label="刷新图谱"
+              aria-label="刷新规范图"
             >
-              刷新图谱
+              刷新
             </Button>
           </div>
-          <span className={styles.searchHint}>输入名称会高亮匹配节点，并弱化其他图谱元素。</span>
+          <span className={styles.searchHint}>
+            此搜索只高亮当前局部图，不会在后台切换社区。
+          </span>
+
+          {coverage && (
+            <div className={styles.coverageNotice} aria-label="规范投影覆盖情况">
+              <span>{coverage.acceptedSourceEntityCount} 个来源实体已解析</span>
+              <span>{coverage.reviewSourceEntityCount} 个待审核实体未进入规范图</span>
+              {coverage.unresolvedSourceEntityCount > 0 && (
+                <span>{coverage.unresolvedSourceEntityCount} 个来源实体尚未解析</span>
+              )}
+              <span>
+                {coverage.projectedSourceRelationCount} / {coverage.sourceRelationCount}{' '}
+                条来源关系进入当前投影
+              </span>
+            </div>
+          )}
+          {graphMetadata?.truncated && (
+            <p className={styles.boundsNotice}>
+              当前局部图已达到返回上限，仅显示有界结果。
+            </p>
+          )}
+
           {communities.length > 0 && (
-            <div aria-label="communities">
-              <span className={styles.searchCaption}>社区</span>
+            <div aria-label="主题社区">
+              <span className={styles.searchCaption}>主题社区</span>
               <ul className={styles.entityList}>
                 {communities.map((community) => (
                   <li key={community.id}>
                     <button
                       type="button"
                       className={styles.entityListBtn}
+                      aria-label={`打开主题社区 ${community.representativeNode.label}`}
                       aria-pressed={selectedCommunity?.id === community.id}
-                      aria-current={centerNodeId === community.representativeNode.id ? 'true' : undefined}
-                      onClick={() => void loadSubgraph(community.representativeNode.id, community)}
+                      aria-current={
+                        centerNodeId === community.representativeNode.id ? 'true' : undefined
+                      }
+                      onClick={() =>
+                        void loadSubgraph(community.representativeNode.id, community)
+                      }
                     >
-                      <span className={styles.entityListLabel}>{community.representativeNode.label}</span>
+                      <span className={styles.entityListLabel}>
+                        {community.representativeNode.label}
+                      </span>
                       <span className={styles.entityListMeta}>
-                        <Chip tone="accent">{community.nodeCount} nodes</Chip>
+                        <Chip tone="accent">{community.nodeCount} 节点</Chip>
+                        <span className={styles.entityDegree} title="聚合关系数">
+                          {community.edgeCount}
+                        </span>
                       </span>
                     </button>
                   </li>
@@ -583,27 +671,33 @@ export function GraphView() {
               </ul>
             </div>
           )}
-          {usingFallback && <span className={styles.searchHint}>社区接口暂不可用，已显示实体列表。</span>}
+
           {rankedNodes.length > 0 && (
-            <div aria-label="entities">
-              <span className={styles.searchCaption}>Entities</span>
+            <div aria-label="规范实体列表">
+              <span className={styles.searchCaption}>当前规范实体</span>
               <ul className={styles.entityList}>
                 {rankedNodes.map(({ node, degree }) => (
                   <li key={node.id}>
                     <button
                       type="button"
                       className={styles.entityListBtn}
+                      aria-label={`选择规范实体 ${node.label}`}
                       ref={(element) => {
                         if (element) entityButtonRefs.current.set(node.id, element)
                         else entityButtonRefs.current.delete(node.id)
                       }}
                       aria-current={selectedNode?.id === node.id ? 'true' : undefined}
-                      onClick={() => setSelectedNode(node)}
+                      onClick={() => {
+                        setSelectedNode(node)
+                        setSelectedEdge(null)
+                      }}
                     >
                       <span className={styles.entityListLabel}>{node.label}</span>
                       <span className={styles.entityListMeta}>
                         <Chip tone="accent">{node.entityType}</Chip>
-                        <span className={styles.entityDegree}>{degree}</span>
+                        <span className={styles.entityDegree} title="投影度数">
+                          {degree}
+                        </span>
                       </span>
                     </button>
                   </li>
@@ -611,6 +705,7 @@ export function GraphView() {
               </ul>
             </div>
           )}
+
           <label className={styles.toggleRow}>
             <input
               type="checkbox"
@@ -618,99 +713,134 @@ export function GraphView() {
               checked={hideIsolated}
               onChange={(event) => setHideIsolated(event.target.checked)}
             />
-            <span className={styles.toggleText}>隐藏孤立节点（度数为 0 的噪声实体）</span>
+            <span className={styles.toggleText}>隐藏孤立节点</span>
           </label>
         </Card>
 
-        <Panel className={styles.detailPanel} eyebrow="Entity Detail" title="实体详情">
+        <Panel className={styles.detailPanel} eyebrow="Canonical Detail" title="规范实体详情">
           {selectedNode ? (
             <div className={styles.detailBody}>
               <div className={styles.entityHeader}>
                 <div className={styles.entityTitleRow}>
                   <h2 className={styles.entityTitle}>{selectedNode.label}</h2>
-                  <Chip tone="accent">{selectedNode.entityType}</Chip>
+                  <Chip tone="accent">规范 · {selectedNode.entityType}</Chip>
                 </div>
-                <DataValue label="entity id">{selectedNode.id}</DataValue>
+                <DataValue label="canonical id">{selectedNode.id}</DataValue>
+                <div className={styles.entityStats}>
+                  <DataValue label="来源文档">
+                    {(selectedNode.documentIds ?? []).join('、') || '无'}
+                  </DataValue>
+                  <DataValue label="来源实体">
+                    {selectedNode.sourceEntityCount ?? 0}
+                  </DataValue>
+                  <DataValue label="mentions">{selectedNode.mentionCount ?? 0}</DataValue>
+                </div>
+                <div className={styles.aliasBlock}>
+                  <span className={styles.searchCaption}>名称与别名</span>
+                  <span>{(selectedNode.aliases ?? []).join(' · ') || '无别名'}</span>
+                  {selectedNode.aliasesTruncated && (
+                    <span className={styles.boundsNotice}>
+                      别名仅显示 {(selectedNode.aliases ?? []).length} /{' '}
+                      {selectedNode.aliasCount ?? 0}
+                    </span>
+                  )}
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"
                   disabled={subgraphLoading}
-                  onClick={() => void loadSubgraph(selectedNode.id)}
+                  onClick={() => void loadSubgraph(selectedNode.id, selectedCommunity)}
                 >
-                  {subgraphLoading ? '加载局部图中…' : '展开局部图'}
+                  {subgraphLoading ? '正在加载局部图…' : '以此实体为中心'}
                 </Button>
               </div>
 
-              <section className={styles.detailBody} aria-label="实体关系">
-                <h3 className={styles.sectionTitle}>关联关系</h3>
+              <section className={styles.detailBody} aria-label="规范实体关系">
+                <h3 className={styles.sectionTitle}>聚合关系与来源证据</h3>
                 {selectedRelations.length > 0 ? (
                   <ul className={styles.relationList}>
-                    {selectedRelations.map(({ edge, otherNode, direction }) => (
-                      <li key={edge.id} className={styles.relationItem}>
-                        <div className={styles.relationTopline}>
-                          <span className={styles.relationType}>{edge.relationType}</span>
-                          <span className={styles.relationDirection}>
-                            {direction === 'outgoing' ? 'out' : 'in'}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          className={styles.relationTargetButton}
-                          aria-pressed={selectedEdge?.id === edge.id}
-                          onClick={() => setSelectedEdge(edge)}
-                        >
-                          <span className={styles.relationTarget}>{otherNode.label}</span>
-                        </button>
-                        <div className={styles.evidenceDetail} aria-label="relation evidence">
-                          <DataValue label="confidence">
-                            {typeof edge.confidence === 'number' ? edge.confidence.toFixed(2) : 'Unknown'}
-                          </DataValue>
-                          <DataValue label="evidence chunk">
-                            {edge.evidenceChunkId ?? <span className={styles.missingEvidence}>Missing evidence</span>}
-                          </DataValue>
-                          <DataValue label="document">
-                            {edgeDocumentId(edge, selectedGraphData) ?? <span className={styles.missingEvidence}>Missing document</span>}
-                          </DataValue>
-                        </div>
-                      </li>
-                    ))}
+                    {selectedRelations.map(({ edge, otherNode, direction }) => {
+                      const evidence = edge.evidence ?? []
+                      const evidenceCount = edge.evidenceCount ?? evidence.length
+                      const supportCount = edge.supportCount ?? 1
+                      return (
+                        <li key={edge.id} className={styles.relationItem}>
+                          <div className={styles.relationTopline}>
+                            <span className={styles.relationType}>{edge.relationType}</span>
+                            <span className={styles.relationDirection}>
+                              {direction === 'outgoing' ? 'out' : 'in'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            className={styles.relationTargetButton}
+                            aria-label={`查看关系 ${edge.relationType} 到 ${otherNode.label}`}
+                            aria-pressed={selectedEdge?.id === edge.id}
+                            onClick={() => setSelectedEdge(edge)}
+                          >
+                            <span className={styles.relationTarget}>{otherNode.label}</span>
+                          </button>
+                          <div className={styles.relationSummary}>
+                            <Chip tone="accent">{supportCount} 条来源关系</Chip>
+                            <DataValue label="最高置信度">
+                              {typeof edge.confidence === 'number'
+                                ? edge.confidence.toFixed(2)
+                                : '未知'}
+                            </DataValue>
+                          </div>
+
+                          {evidence.length > 0 ? (
+                            <ul className={styles.evidenceList} aria-label="关系来源证据">
+                              {evidence.map((item) => (
+                                <li
+                                  className={styles.evidenceItem}
+                                  key={[
+                                    item.documentId,
+                                    item.chunkId,
+                                    item.sourceEntityId,
+                                    item.targetEntityId,
+                                  ].join('|')}
+                                >
+                                  <div className={styles.evidenceDetail}>
+                                    <DataValue label="document">{item.documentId}</DataValue>
+                                    <DataValue label="chunk">{item.chunkId}</DataValue>
+                                    <DataValue label="confidence">
+                                      {typeof item.confidence === 'number'
+                                        ? item.confidence.toFixed(2)
+                                        : '未知'}
+                                    </DataValue>
+                                  </div>
+                                  <span className={styles.evidenceEndpoints}>
+                                    {item.sourceEntityId} → {item.targetEntityId}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className={styles.missingEvidence}>
+                              此聚合关系没有返回可展示的来源证据。
+                            </p>
+                          )}
+                          {edge.evidenceTruncated && (
+                            <p className={styles.boundsNotice}>
+                              当前显示 {evidence.length} / 共 {evidenceCount} 条证据
+                            </p>
+                          )}
+                        </li>
+                      )
+                    })}
                   </ul>
                 ) : (
-                  <p className={styles.noRelations}>这个实体当前没有关系。</p>
+                  <p className={styles.noRelations}>这个规范实体在当前局部图中没有关系。</p>
                 )}
               </section>
             </div>
           ) : (
             <div className={styles.emptyState}>
-              <h2 className={styles.emptyTitle}>实体列表</h2>
+              <h2 className={styles.emptyTitle}>选择一个规范实体</h2>
               <p className={styles.emptyCopy}>
-                点击图中节点，或用下方列表选择实体查看详情（可键盘 Tab/方向键访问）。
+                可点击画布节点，或使用上方键盘可达的规范实体列表查看跨文档来源与关系证据。
               </p>
-              {/* F5 无障碍：Cytoscape canvas 节点不可键盘访问，并行提供按钮列表作为可达路径。
-                  F2：按度数降序，每项带类型 Chip 与度数。 */}
-              {rankedNodes.length > 0 ? (
-                <ul className={styles.entityList} aria-label="实体列表">
-                  {rankedNodes.map(({ node, degree }) => (
-                    <li key={node.id}>
-                      <button
-                        type="button"
-                        className={styles.entityListBtn}
-                        onClick={() => setSelectedNode(node)}
-                      >
-                        <span className={styles.entityListLabel}>{node.label}</span>
-                        <span className={styles.entityListMeta}>
-                          <Chip tone="accent">{node.entityType}</Chip>
-                          <span className={styles.entityDegree} title="图内度数">
-                            {degree}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className={styles.noRelations}>知识库暂无实体。</p>
-              )}
             </div>
           )}
         </Panel>
