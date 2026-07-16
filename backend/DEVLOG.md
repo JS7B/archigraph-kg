@@ -424,3 +424,10 @@
 - 为什么需要：同一个概念出现在多篇文档时，文档级 ID 会产生重复节点；直接合并又会破坏引用追溯和按文档删除。覆盖层同时保留了“它来自哪里”和“它与谁是同一个概念”。
 - 为什么这么做：规范 ID 只对既有规范化名称做 SHA-256，实体类型不进入 ID，避免模型类型漂移改变身份；只有真实 `Chunk-[:MENTIONS]->Entity` 证据才能写 accepted 边，模糊匹配和冲突只保存待复核候选；别名必须先验证来源，不能用无出处的字符串映射。
 - 踩了什么坑：一次消歧只能选择一个真实 mention 作为判断证据，不能把同一判断复制到所有 mention 上；重复运行时还要保留原 accepted 边的 method、reason 和 evidence，否则首轮 `bootstrap` 会在第二轮悄悄变成 `exact`。显式 alias 必须先于普通 exact，否则已 bootstrap 的旧拼写永远无法被人工重指。删除查询也不能由必需存在的 Document 驱动；各阶段要用 `OPTIONAL MATCH + collect/FOREACH` 保留一行，才能清掉 Document 已丢失但 Entity 仍残留的半成品状态。日常入库和单文档删除只能清理本次 source 原来指向的 canonical；全库孤儿清理只留给显式 backfill，否则测试或普通操作会顺带改动共享个人图谱。
+
+## 2026-07-16 查询时规范投影与确定性主题社区
+- 做了什么：新增显式 canonical communities、局部子图和搜索 API，在读取时把 accepted source `RELATES` 按规范端点与关系类型聚合，返回多文档证据、覆盖统计、有界 BFS 和支持度加权主题社区；旧 source API 与 QA 查询保持不变。
+- 这是什么：查询时投影不是在 Neo4j 再存一套规范关系，而是用 `RESOLVES_TO` 临时把文档级关系映射成跨文档关系；单层 modularity local-moving 会比较“节点留在当前组”和“移动到相邻组”对社区内部连接强度的增益，因此能把只有弱桥相连的主题拆开，而不只是把整个连通分量称为一个社区。
+- 为什么需要：直接展示 source graph 会把跨文档同义实体和 17 个 review 节点混在一起；只返回一条关系证据又会掩盖多文档支持。覆盖统计明确说明 accepted、review、排除关系和折叠自环的数量，`evidenceCount + evidenceTruncated` 则保证证据有界但不静默丢失。
+- 为什么这么做：默认 `minConfidence=0.5` 与抽取 accepted floor 一致；关系只在两端 resolution 证据、关系 Chunk、同文档和双端 `MENTIONS` 都真实时参与聚合。边按完整有向键生成稳定 ID，社区按排序成员生成稳定 ID并以 canonical ID 打破增益平局；投影全程只读，所以别名改绑和文档删除会自动改变端点或支持数，不需要维护容易过期的规范 `RELATES`。
+- 踩了什么坑：社区 API 的节点、边、证据和社区数量是四层不同边界，任何一层截断都必须显式标记；局部图还要优先保留 center，不能在探测到 `nodeLimit + 1` 后重新按 ID 排序把 center 截掉。真实测试使用独立临时 Neo4j 容器和 `test_wave3_*` 前缀，验证 alias 改绑、删除支持从 2→1→0、坏证据排除、source fingerprint 不变及 canonical `RELATES` 始终为 0，避免扫描或改写个人图库。

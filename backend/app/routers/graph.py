@@ -7,10 +7,20 @@
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.graph.models import (
+    CanonicalCommunityMetadata,
+    CanonicalCommunityResponse,
+    CanonicalGraphNode,
+    CanonicalSubgraphMetadata,
+    CanonicalSubgraphResponse,
     GraphEdge,
     GraphNode,
     LocalSubgraphMetadata,
     LocalSubgraphResponse,
+)
+from app.graph.projection import (
+    CanonicalProjectionStore,
+    bounded_bfs,
+    deterministic_communities,
 )
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
@@ -474,3 +484,140 @@ async def list_communities(
         database_="neo4j",
     )
     return _community_summaries(records, node_limit=node_limit)[:limit]
+
+
+_CANONICAL_SUBGRAPH_SCOPE_NODE_LIMIT = 5_000
+_CANONICAL_SUBGRAPH_SCOPE_EDGE_LIMIT = 10_000
+
+
+@router.get(
+    "/canonical/communities",
+    response_model=CanonicalCommunityResponse,
+    response_model_exclude_none=True,
+)
+async def list_canonical_communities(
+    request: Request,
+    limit: int = Query(20, ge=1, le=100),
+    node_limit: int = Query(200, alias="nodeLimit", ge=1, le=500),
+    edge_limit: int = Query(400, alias="edgeLimit", ge=1, le=1000),
+    evidence_limit: int = Query(20, alias="evidenceLimit", ge=1, le=20),
+    document_id: str | None = Query(None, alias="documentId"),
+    min_confidence: float = Query(
+        0.5, alias="minConfidence", ge=0.0, le=1.0
+    ),
+) -> CanonicalCommunityResponse:
+    """Return accepted-only canonical topic communities and coverage."""
+
+    store = CanonicalProjectionStore(request.app.state.neo4j)
+    snapshot = store.load_snapshot(
+        node_limit=node_limit,
+        edge_limit=edge_limit,
+        evidence_limit=evidence_limit,
+        document_id=document_id,
+        min_confidence=min_confidence,
+    )
+    community_probe = deterministic_communities(
+        snapshot.nodes, snapshot.edges, limit=limit + 1
+    )
+    communities = community_probe[:limit]
+    metadata = CanonicalCommunityMetadata(
+        limit=limit,
+        node_limit=node_limit,
+        edge_limit=edge_limit,
+        evidence_limit=evidence_limit,
+        community_count=len(communities),
+        node_count=sum(item.node_count for item in communities),
+        edge_count=len(snapshot.edges),
+        evidence_count=snapshot.evidence_count,
+        truncated=snapshot.truncated or len(community_probe) > limit,
+    )
+    return CanonicalCommunityResponse(
+        communities=communities,
+        coverage=snapshot.coverage,
+        metadata=metadata,
+    )
+
+
+@router.get(
+    "/canonical/entities/{canonical_id}/subgraph",
+    response_model=CanonicalSubgraphResponse,
+    response_model_exclude_none=True,
+)
+async def get_canonical_subgraph(
+    request: Request,
+    canonical_id: str,
+    depth: int = Query(1, ge=1, le=4),
+    node_limit: int = Query(50, alias="nodeLimit", ge=1, le=100),
+    edge_limit: int = Query(100, alias="edgeLimit", ge=1, le=200),
+    evidence_limit: int = Query(20, alias="evidenceLimit", ge=1, le=20),
+    document_id: str | None = Query(None, alias="documentId"),
+    min_confidence: float = Query(
+        0.5, alias="minConfidence", ge=0.0, le=1.0
+    ),
+) -> CanonicalSubgraphResponse:
+    """Run bounded BFS over the accepted read-time canonical projection."""
+
+    store = CanonicalProjectionStore(request.app.state.neo4j)
+    snapshot = store.load_snapshot(
+        node_limit=_CANONICAL_SUBGRAPH_SCOPE_NODE_LIMIT,
+        edge_limit=_CANONICAL_SUBGRAPH_SCOPE_EDGE_LIMIT,
+        evidence_limit=evidence_limit,
+        document_id=document_id,
+        min_confidence=min_confidence,
+        center_id=canonical_id,
+    )
+    try:
+        bounded = bounded_bfs(
+            snapshot,
+            center_id=canonical_id,
+            depth=depth,
+            node_limit=node_limit,
+            edge_limit=edge_limit,
+        )
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"规范实体不存在或不在当前证据范围: {canonical_id}",
+        ) from None
+    returned_evidence_count = sum(
+        edge.evidence_count for edge in bounded.edges
+    )
+    truncated = (
+        snapshot.node_truncated
+        or snapshot.edge_truncated
+        or bounded.truncated
+        or any(edge.evidence_truncated for edge in bounded.edges)
+    )
+    return CanonicalSubgraphResponse(
+        center_id=canonical_id,
+        nodes=bounded.nodes,
+        edges=bounded.edges,
+        coverage=snapshot.coverage,
+        metadata=CanonicalSubgraphMetadata(
+            depth=depth,
+            node_limit=node_limit,
+            edge_limit=edge_limit,
+            evidence_limit=evidence_limit,
+            node_count=len(bounded.nodes),
+            edge_count=len(bounded.edges),
+            evidence_count=returned_evidence_count,
+            truncated=truncated,
+        ),
+    )
+
+
+@router.get(
+    "/canonical/search",
+    response_model=list[CanonicalGraphNode],
+    response_model_exclude_none=True,
+)
+async def search_canonical_entities(
+    request: Request,
+    q: str = Query(..., min_length=1),
+    limit: int = Query(20, ge=1, le=100),
+    document_id: str | None = Query(None, alias="documentId"),
+) -> list[CanonicalGraphNode]:
+    """Search accepted canonical names and accepted source aliases."""
+
+    store = CanonicalProjectionStore(request.app.state.neo4j)
+    return store.search(q, limit=limit, document_id=document_id)
