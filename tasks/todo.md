@@ -297,6 +297,16 @@
 - [x] Local-first frontend graph experience with stable layout and evidence detail
 - [x] Final audit, regression verification, and worktree cleanup
 
+## Wave 1：有限并行与质量基线（2026-07-16）
+
+- [x] `feat/kg-extraction`：单文档非 `SKIP` chunk 默认最多并发 3，按原始位置恢复结果与失败顺序，完成态进度只统计可抽取 chunk。
+- [x] `feat/kg-evaluation`：补齐实体 precision、关系 semantic precision、provenance completeness、人工复核覆盖率和六类结构诊断。
+- [x] 未匹配标注的抽取项只进入 review candidate；未人工定性的项目不进入 precision 分母。
+- [x] 主仓库审计门禁覆盖两条固定分支，并将 runs 单元门禁与既有 live Neo4j 用例隔离。
+- [x] 两条工人分支均由主窗口逐文件审查、退回缺失用例后合并；未新增依赖、未推送远端。
+
+验证：抽取聚焦测试 50 passed；runs 无服务单元测试 4 passed / 1 个 live Neo4j 用例 deselected；合并后连接 healthy Neo4j 的后端回归 269 passed（主动排除两组真实 LLM 用例）；评估测试 42 passed；审计基础设施 30 passed。6 个 80ms 合成远程调用从串行 0.486s 降至 3 worker 0.164s（约 2.96x，仅证明等待可重叠，不作为真实模型 SLA）。
+
 ## Review
 
 - 2026-06-16：将项目定位为个人知识图谱 GraphRAG Agent。确认 OpenAI-compatible 调用和 Neo4j 图谱存储，形成初始实现路线。
