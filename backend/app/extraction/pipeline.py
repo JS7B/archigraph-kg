@@ -20,15 +20,19 @@ def extract_and_ingest(
     doc: ParsedDocument,
     *,
     max_attempts: int = 3,
+    max_workers: int = 3,
     database: str = "neo4j",
     on_progress: Callable[[int, int], None] | None = None,
 ) -> ExtractionStats:
     """对已入库文档执行 抽取->合并->写图；单 chunk 失败记录跳过不中断。
 
-    on_progress 透传给 extract_document（逐 chunk 进度回调，见其 docstring）。
+    on_progress 透传给 extract_document（每个可抽取 chunk 完成后回调）。
     """
     extractions, failures = extract_document(
-        doc, max_attempts=max_attempts, on_progress=on_progress
+        doc,
+        max_attempts=max_attempts,
+        max_workers=max_workers,
+        on_progress=on_progress,
     )
     diagnostics: list[str] = []
     merged = merge_extractions(doc.document_id, extractions, diagnostics=diagnostics)

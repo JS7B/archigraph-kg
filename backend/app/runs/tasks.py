@@ -92,15 +92,15 @@ async def run_ingest(
             ingest_document, driver, doc, embeddings, name=source_name, source_type=doc_type
         )
 
-        # 抽取是入库最长的一段（每 chunk 一次 LLM 调用，动辄数分钟）。逐 chunk 发
-        # 进度事件，消除前端"卡死"错觉。回调在 to_thread 工作线程内触发，RunStore
-        # 非线程安全，用 call_soon_threadsafe 投递回事件循环线程（同 run_chat 模式）。
+        # 抽取是入库最长的一段（每 chunk 一次 LLM 调用，动辄数分钟）。每完成一个
+        # 可抽取 chunk 发进度事件，消除前端"卡死"错觉。回调在 to_thread 工作线程
+        # 内触发，RunStore 非线程安全，用 call_soon_threadsafe 投递回事件循环线程。
         loop = asyncio.get_running_loop()
 
         def _extract_progress(index: int, total: int) -> None:
             event = RunEvent(
                 stage=Stage.EXTRACTING,
-                message=f"正在从分块 {index}/{total} 中抽取实体与关系…",
+                message=f"已从分块 {index}/{total} 中抽取实体与关系",
             )
             loop.call_soon_threadsafe(store.append_event, run_id, event)
 
