@@ -10,8 +10,11 @@ from evals.quality_fixtures import (
 )
 from evals.quality_metrics import (
     graph_structure_diagnostics,
+    relation_review_candidate_ids,
     summarize_entity_precision,
+    summarize_entity_review_coverage,
     summarize_provenance_completeness,
+    summarize_relation_review_coverage,
     summarize_relation_semantic_precision,
 )
 
@@ -143,6 +146,52 @@ def test_review_candidates_do_not_reduce_precision_denominator():
     assert baseline.entity_review_coverage.numerator == 1
     assert baseline.entity_review_coverage.denominator == 2
     assert baseline.entity_review_candidates == ("candidate",)
+
+
+@pytest.mark.parametrize(
+    ("labels", "expected"),
+    [([True, False], (2, 2, 1.0)), ([True, None], (1, 2, 0.5)), ([], (0, 0, None))],
+)
+def test_entity_review_coverage_full_partial_and_empty(labels, expected):
+    entities = [
+        _entity(f"e{index}", reviewed_correct=label)
+        for index, label in enumerate(labels)
+    ]
+    fixtures = [_fixture("doc", entities, [])] if entities else []
+
+    result = summarize_entity_review_coverage(fixtures)
+
+    assert (result.numerator, result.denominator, result.rate) == expected
+
+
+@pytest.mark.parametrize(
+    ("labels", "expected"),
+    [([True, False], (2, 2, 1.0)), ([True, None], (1, 2, 0.5)), ([], (0, 0, None))],
+)
+def test_relation_review_coverage_full_partial_and_empty(labels, expected):
+    entities = [_entity("source"), _entity("target")]
+    relations = [
+        _relation(f"r{index}", "source", "target", semantically_correct=label)
+        for index, label in enumerate(labels)
+    ]
+    fixtures = [_fixture("doc", entities, relations)] if relations else []
+
+    result = summarize_relation_review_coverage(fixtures)
+
+    assert (result.numerator, result.denominator, result.rate) == expected
+
+
+def test_only_unmatched_unreviewed_relation_stays_a_review_candidate():
+    entities = [_entity("source"), _entity("target")]
+    relations = [
+        _relation("confirmed-correct", "source", "target", semantically_correct=True),
+        _relation("confirmed-wrong", "source", "target", semantically_correct=False),
+        _relation("pending", "source", "target", semantically_correct=None),
+    ]
+
+    result = relation_review_candidate_ids([_fixture("doc", entities, relations)])
+
+    assert result == ("pending",)
 
 
 def test_structural_diagnostics_reports_every_requested_signal():
