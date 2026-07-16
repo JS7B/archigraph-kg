@@ -9,6 +9,7 @@ import {
 } from '../../api/graph'
 import { Button, Card, Chip, DataValue, Eyebrow, Panel } from '../../components/ui'
 import type {
+  CanonicalCommunityMetadata,
   CanonicalSubgraphMetadata,
   GraphCommunity,
   GraphData,
@@ -201,6 +202,8 @@ export function GraphView() {
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [communities, setCommunities] = useState<GraphCommunity[]>([])
   const [coverage, setCoverage] = useState<ProjectionCoverage | null>(null)
+  const [communityMetadata, setCommunityMetadata] =
+    useState<CanonicalCommunityMetadata | null>(null)
   const [graphMetadata, setGraphMetadata] = useState<CanonicalSubgraphMetadata | null>(null)
   const [selectedCommunity, setSelectedCommunity] = useState<GraphCommunity | null>(null)
   const [centerNodeId, setCenterNodeId] = useState<string | null>(null)
@@ -252,6 +255,10 @@ export function GraphView() {
   const loadSubgraph = useCallback(
     async (nodeId: string, community: GraphCommunity | null) => {
       const generation = ++requestGenerationRef.current
+      // A local graph request supersedes any pending/failed overview refresh.
+      // The older refresh sees a stale generation and cannot write its finally state.
+      setLoading(false)
+      setLoadError(null)
       setSubgraphLoading(true)
       setSubgraphError(null)
       setFailedSubgraphRequest(null)
@@ -270,6 +277,8 @@ export function GraphView() {
     [
       applyGraphReplacement,
       setFailedSubgraphRequest,
+      setLoadError,
+      setLoading,
       setSubgraphError,
       setSubgraphLoading,
     ],
@@ -287,6 +296,7 @@ export function GraphView() {
       if (generation !== requestGenerationRef.current) return
       setCommunities(overview.communities)
       setCoverage(overview.coverage)
+      setCommunityMetadata(overview.metadata)
       if (overview.communities.length === 0) {
         setGraphData({ nodes: [], edges: [] })
         setGraphMetadata(null)
@@ -317,6 +327,7 @@ export function GraphView() {
     applyGraphReplacement,
     setCenterNodeId,
     setCommunities,
+    setCommunityMetadata,
     setCoverage,
     setFailedSubgraphRequest,
     setGraphData,
@@ -635,6 +646,11 @@ export function GraphView() {
           {graphMetadata?.truncated && (
             <p className={styles.boundsNotice}>
               当前局部图已达到返回上限，仅显示有界结果。
+            </p>
+          )}
+          {communityMetadata?.truncated && (
+            <p className={styles.boundsNotice}>
+              主题社区概览已达到返回上限，仅显示有界结果。
             </p>
           )}
 

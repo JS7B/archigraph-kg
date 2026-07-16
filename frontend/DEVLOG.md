@@ -867,3 +867,6 @@
 - 踩了什么坑：React 19 的 preserve-manual-memoization lint 会核对 useCallback 推导依赖，
   状态 setter 也要与规则推导保持一致；另外快速社区切换不能简单禁用全部社区按钮，否则
   generation 防旧响应虽存在却无法被用户触发，最终保留可切换按钮并让最后一次请求获胜。
+  复审还发现 generation 虽能拦住旧数据，却不会自动统一 `loading/loadError` 两套界面状态；
+  局部图接管请求时必须显式结束 overview loading 并清 overview error。社区概览的 truncated
+  也要与局部图 metadata 分开保存，否则一次未截断的 subgraph 会掩盖概览本身的边界。

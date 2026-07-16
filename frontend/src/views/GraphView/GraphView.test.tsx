@@ -360,6 +360,90 @@ it('prevents a slower community response from overwriting the latest selection',
   expect(screen.getAllByText('Delta').length).toBeGreaterThan(0)
 })
 
+it('lets a subgraph request take over a pending refresh without leaving global loading stuck', async () => {
+  const alpha = node('canonical:v1:alpha', 'Alpha')
+  const beta = node('canonical:v1:beta', 'Beta')
+  const currentOverview = overview([
+    community('community:v1:alpha', alpha),
+    community('community:v1:beta', beta),
+  ])
+  const pendingRefresh = deferred<CanonicalCommunityOverview>()
+  mockedFetchCanonicalCommunities
+    .mockResolvedValueOnce(currentOverview)
+    .mockImplementationOnce(() => pendingRefresh.promise)
+  mockedFetchCanonicalSubgraph.mockImplementation(async (canonicalId) =>
+    canonicalId === alpha.id
+      ? subgraph(alpha)
+      : subgraph(beta, node('canonical:v1:delta', 'Delta')),
+  )
+
+  render(<GraphView />)
+  await screen.findByRole('button', { name: '选择规范实体 Alpha' })
+
+  fireEvent.click(screen.getByRole('button', { name: '刷新规范图' }))
+  await waitFor(() => expect(mockedFetchCanonicalCommunities).toHaveBeenCalledTimes(2))
+  fireEvent.click(screen.getByRole('button', { name: '打开主题社区 Beta' }))
+
+  expect(await screen.findByRole('button', { name: '选择规范实体 Beta' })).toBeInTheDocument()
+  expect(screen.queryByRole('status', { name: 'graph-loading' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '刷新规范图' })).toBeEnabled()
+
+  pendingRefresh.resolve(currentOverview)
+})
+
+it('clears a failed refresh overlay when an existing community loads successfully', async () => {
+  const alpha = node('canonical:v1:alpha', 'Alpha')
+  const currentOverview = overview([community('community:v1:alpha', alpha)])
+  mockedFetchCanonicalCommunities
+    .mockResolvedValueOnce(currentOverview)
+    .mockRejectedValueOnce(new ApiError('upstream', 'overview refresh failed'))
+  mockedFetchCanonicalSubgraph.mockResolvedValue(subgraph(alpha))
+
+  render(<GraphView />)
+  await screen.findByRole('button', { name: '选择规范实体 Alpha' })
+
+  fireEvent.click(screen.getByRole('button', { name: '刷新规范图' }))
+  expect(await screen.findByRole('alert', { name: 'graph-error' })).toHaveTextContent(
+    'overview refresh failed',
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: '打开主题社区 Alpha' }))
+
+  await waitFor(() =>
+    expect(screen.queryByRole('alert', { name: 'graph-error' })).not.toBeInTheDocument(),
+  )
+  expect(screen.getByRole('button', { name: '选择规范实体 Alpha' })).toBeInTheDocument()
+})
+
+it('keeps the canonical overview truncation notice after a non-truncated subgraph loads', async () => {
+  const alpha = node('canonical:v1:alpha', 'Alpha')
+  mockedFetchCanonicalCommunities.mockResolvedValue({
+    ...overview([community('community:v1:alpha', alpha)]),
+    metadata: {
+      ...overview([]).metadata,
+      communityCount: 1,
+      nodeCount: 2,
+      edgeCount: 1,
+      evidenceCount: 1,
+      truncated: true,
+    },
+  })
+  mockedFetchCanonicalSubgraph.mockResolvedValue({
+    ...subgraph(alpha),
+    metadata: {
+      ...subgraph(alpha).metadata,
+      truncated: false,
+    },
+  })
+
+  render(<GraphView />)
+
+  expect(
+    await screen.findByText('主题社区概览已达到返回上限，仅显示有界结果。'),
+  ).toBeInTheDocument()
+  expect(screen.queryByText('当前局部图已达到返回上限，仅显示有界结果。')).not.toBeInTheDocument()
+})
+
 it('clears stale node and relation detail after a successful graph replacement', async () => {
   const alpha = node('canonical:v1:alpha', 'Alpha')
   const gamma = node('canonical:v1:gamma', 'Gamma')

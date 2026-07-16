@@ -130,7 +130,6 @@ export interface CanonicalSubgraphQuery {
 export interface CanonicalSearchQuery {
   limit?: number
   documentId?: string
-  minConfidence?: number
 }
 
 function boundedInteger(value: number | undefined, fallback: number, max: number): number {
@@ -344,7 +343,6 @@ export async function searchCanonicalEntities(
     limit: String(boundedInteger(options.limit, 20, 100)),
   })
   appendOptionalParam(params, 'documentId', options.documentId)
-  appendConfidence(params, options.minConfidence)
   const raw = await apiFetch<RawCanonicalNode[]>(
     `/api/graph/canonical/search?${params.toString()}`,
   )
