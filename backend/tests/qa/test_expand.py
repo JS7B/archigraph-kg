@@ -127,11 +127,14 @@ def _seed_excluded_facts(driver) -> None:
         MERGE (bad_resolution:Entity {entity_id: $bad_resolution_id})
           SET bad_resolution.name = 'Bad Resolution',
               bad_resolution.document_id = $doc
+        MERGE (non_entity:SourceResidue {entity_id: $non_entity_id})
+          SET non_entity.name = 'Not An Entity', non_entity.document_id = $doc
         MERGE (alias:Entity {entity_id: $alias_id})
           SET alias.name = 'Alpha Alias', alias.document_id = $doc
         MERGE (chunk)-[:MENTIONS]->(review)
         MERGE (chunk)-[:MENTIONS]->(unresolved)
         MERGE (chunk)-[:MENTIONS]->(bad_resolution)
+        MERGE (chunk)-[:MENTIONS]->(non_entity)
         MERGE (chunk)-[:MENTIONS]->(alias)
         MERGE (chunk)-[:MENTIONS]->(cross_target)
         MERGE (review)-[review_resolution:RESOLVES_TO]->(canonical_a)
@@ -143,6 +146,9 @@ def _seed_excluded_facts(driver) -> None:
         MERGE (bad_resolution)-[bad_link:RESOLVES_TO]->(canonical_a)
           SET bad_link.source_document_id = $doc,
               bad_link.evidence_chunk_id = $missing_chunk_id
+        MERGE (non_entity)-[non_entity_resolution:RESOLVES_TO]->(canonical_a)
+          SET non_entity_resolution.source_document_id = $doc,
+              non_entity_resolution.evidence_chunk_id = $chunk_id
         MERGE (alias)-[alias_resolution:RESOLVES_TO]->(canonical_a)
           SET alias_resolution.source_document_id = $doc,
               alias_resolution.evidence_chunk_id = $chunk_id
@@ -154,6 +160,9 @@ def _seed_excluded_facts(driver) -> None:
         }]->(unresolved)
         MERGE (bad_resolution)-[:RELATES {
           type: 'bad_resolution_fact', evidence_chunk_id: $chunk_id
+        }]->(target)
+        MERGE (non_entity)-[:RELATES {
+          type: 'non_entity_fact', evidence_chunk_id: $chunk_id
         }]->(target)
         MERGE (source)-[:RELATES {
           type: 'fake_relation_evidence', evidence_chunk_id: $missing_chunk_id
@@ -182,6 +191,7 @@ def _seed_excluded_facts(driver) -> None:
         review_id=f"{DOC_A}::review",
         unresolved_id=f"{DOC_A}::unresolved",
         bad_resolution_id=f"{DOC_A}::bad-resolution",
+        non_entity_id=f"{DOC_A}::not-an-entity",
         alias_id=f"{DOC_A}::alpha-alias",
         canonical_a=CANONICAL_A,
         canonical_b=CANONICAL_B,

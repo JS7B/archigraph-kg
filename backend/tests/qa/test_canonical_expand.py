@@ -97,7 +97,10 @@ def test_query_is_read_only_and_freezes_every_accepted_evidence_boundary():
     assert "chunk_id: selected_resolution.evidence_chunk_id" in compact
     assert "(selected_resolution_evidence:Chunk" in compact
     assert "-[:MENTIONS]->(selected_source)" in compact
-    assert re.search(r"\(source\)-\[source_resolution:RESOLVES_TO\]\s*->", compact)
+    assert re.search(
+        r"\(source:Entity\)-\[source_resolution:RESOLVES_TO\]\s*->",
+        compact,
+    )
     assert re.search(r"\(target\)-\[target_resolution:RESOLVES_TO\]\s*->", compact)
     assert "source_resolution.source_document_id = source.document_id" in compact
     assert "target_resolution.source_document_id = target.document_id" in compact

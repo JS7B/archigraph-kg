@@ -39,7 +39,7 @@ WHERE selected_resolution.source_document_id = selected_source.document_id
     WHERE selected_resolution_evidence.document_id = selected_source.document_id
   }
 WITH DISTINCT seed_canonical
-MATCH (source)-[source_resolution:RESOLVES_TO]
+MATCH (source:Entity)-[source_resolution:RESOLVES_TO]
       ->(source_canonical:CanonicalEntity)
 MATCH (source)-[relation:RELATES]->(target:Entity)
 MATCH (target)-[target_resolution:RESOLVES_TO]
