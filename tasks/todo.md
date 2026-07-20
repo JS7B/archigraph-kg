@@ -339,7 +339,7 @@
 - [x] Q `feat/qa-citation-guard`：统一有效角标校验、正文净化和基于有效 Citation 的 confidence。
 - [x] S `feat/conversation-atomic-turn`：以 Run 为幂等键，原子分配 turn_index 并一次提交 user/agent 消息。
 - [x] R `feat/qa-canonical-expand`：QA 关系扩展只读取 evidence_pool 内 Chunk 对应的 accepted-only canonical 关系。
-- [ ] F 主仓库终审：逐分支 diff/门禁、全量后端/评估/前端回归、隔离 Neo4j 生命周期、个人图谱只读指纹和本地多轮问答验收。
+- [x] F 主仓库终审：逐分支 diff/门禁、全量后端/评估/前端回归、隔离 Neo4j 生命周期、个人图谱只读指纹和本地多轮问答验收。
 
 执行顺序：A → P →（Q 与 S 并行）→ R → F。若出现无法归属单分支的真实集成缺陷，才条件创建 `feat/qa-integration`，不预建空分支。
 
@@ -352,6 +352,8 @@ Wave 1 验证：主审与独立复核均无阻塞发现；memory grounding 13 pa
 Wave 2 验证：Q 经三轮主审补齐跨行/转义 code span、超长数字角标与缩进 Markdown 反例，finalizer + pipeline 23 passed；S 确定性门禁 atomic 6 passed、chat contract 2 passed、runs 7 passed / 1 个 live 用例 deselected。隔离 Neo4j 上 store 14 passed，8 个并发 Run 产生 8 对相邻且不重叠的索引，同 Run 重试未增加 16 条消息计数且未覆写，测试数据已清理；P/Q/S 集成 memory 13 passed，前端 `tsc --noEmit` 通过。两条业务分支与条件集成分支的干净 worktree gate 均返回 `{"continue": true}`，未触碰个人图库。
 
 Wave 3 验证：主审发现并修复全局投影 source 缺 `:Entity` 标签导致非 Entity 脏节点泄漏的问题；修复后 deterministic canonical 6 passed，QA 聚焦回归 53 passed，隔离真实 Neo4j 2 passed，clean gate 返回 `{"continue": true}`。真实图库中 accepted 双文档支持聚合为 1 条路径/support=2，review/unresolved 残留边、伪 resolution/relation evidence、单端 mention、跨文档、自环及 `SourceResidue` 均被排除；查询前后 scoped 指纹一致、canonical `RELATES=0`、teardown 节点归零。
+
+F 最终验证：经用户授权将共享 `myself` 环境中不兼容的 Starlette 1.3.1 调整为 FastAPI 0.115.12 要求范围内的 0.46.2，当前仓库 `app.main` 可正常导入。主仓库在无宿主挂载的隔离 Neo4j 上完成后端回归 370 passed（排除显式真实 LLM 用例），评估 42 passed；前端 lint、typecheck、7 files / 32 tests 与 production build 全部通过，仅保留既有的大 chunk 体积提示。真实 uvicorn `/health`、`/health/deps` 与 Vite HTTP 冒烟通过；真实多轮核心 E2E 捕获到强指代追问被改写为独立检索问题，会话按 user/agent/user/agent 和 1/2/3/4 原子落库。HTTP 两轮验收进一步验证了异步 Run、有效引用终审、无证据时固定低置信拒答及会话删除；模型偶发不调用检索工具时没有伪造引用。个人业务图谱在验收前后指纹均为 `29e62e5b35a8344f6e377d546d09de5a09bc01e2a141458333a9631108e11bb8`，Document/Chunk/Entity/CanonicalEntity/RELATES/RESOLVES_TO 计数保持 2/57/149/131/92/132，临时会话节点残留 0。最终集成回归发现并修正一条仍把未知会话当作 200 的旧测试夹具，生产契约未改；隔离容器、辅助前后端进程、工作分支和 worktree 均已回收，个人 Neo4j 保持 healthy 运行。
 
 ## Review
 
