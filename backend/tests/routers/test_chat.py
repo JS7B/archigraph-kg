@@ -74,8 +74,15 @@ def test_chat_returns_run_id_and_conversation_id():
     assert body["conversationId"]
 
 
-def test_chat_with_existing_conversation():
+def test_chat_with_existing_conversation(monkeypatch):
     """追问：传 conversationId 透传，响应返回同一个 id。"""
+    monkeypatch.setattr(
+        chat_mod,
+        "get_conversation",
+        lambda driver, cid: Conversation(
+            conversation_id=cid, title="已有会话", message_count=1
+        ),
+    )
     client, _ = _client()
     resp = client.post(
         "/api/chat",
