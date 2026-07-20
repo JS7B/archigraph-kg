@@ -12,7 +12,7 @@ export interface Conversation {
 
 /** 对话消息（图谱 Message 的前端形态；GET /api/conversations/{id}.messages 元素）。 */
 export interface ConversationMessage {
-  messageId: string // 形如 "conv_aaaa#1"
+  messageId: string // 服务端生成的不透明标识，前端不应解析其格式
   turnIndex: number // 从 1 起
   role: 'user' | 'agent'
   text: string

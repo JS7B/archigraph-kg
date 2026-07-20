@@ -289,8 +289,8 @@ async def test_run_chat_without_history_never_invokes_rewriter(monkeypatch):
 
     monkeypatch.setattr(tasks_mod, "resolve_retrieval_question", _unexpected_rewrite)
     monkeypatch.setattr(tasks_mod, "answer_question_agentic", _agentic)
-    monkeypatch.setattr(tasks_mod, "add_message", lambda *args, **kwargs: None)
-    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8])
+    monkeypatch.setattr(tasks_mod, "append_turn", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8] * 2)
     store = RunStore()
     run = store.create_run(RunKind.CHAT)
 
@@ -339,8 +339,8 @@ async def test_rewrite_failure_inside_chat_semaphore_keeps_run_alive(monkeypatch
 
     monkeypatch.setattr(rewrite_mod.llm, "chat", _failed_rewrite)
     monkeypatch.setattr(tasks_mod, "answer_question_agentic", _agentic)
-    monkeypatch.setattr(tasks_mod, "add_message", lambda *args, **kwargs: None)
-    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8])
+    monkeypatch.setattr(tasks_mod, "append_turn", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8] * 2)
     store = RunStore()
     run = store.create_run(RunKind.CHAT)
 
@@ -400,8 +400,8 @@ async def test_bad_request_fallback_reuses_one_rewrite(monkeypatch):
 
     monkeypatch.setattr(tasks_mod, "answer_question_agentic", _agentic)
     monkeypatch.setattr(tasks_mod, "answer_question", _linear)
-    monkeypatch.setattr(tasks_mod, "add_message", lambda *args, **kwargs: None)
-    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8])
+    monkeypatch.setattr(tasks_mod, "append_turn", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8] * 2)
     store = RunStore()
     run = store.create_run(RunKind.CHAT)
 
