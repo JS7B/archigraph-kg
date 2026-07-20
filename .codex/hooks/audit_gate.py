@@ -78,6 +78,77 @@ PYTHON_GRAPH_COMMAND = [
     "backend/tests/routers/test_graph.py",
     "-q",
 ]
+PYTHON_COMPILE_COMMAND = [
+    sys.executable,
+    "-m",
+    "compileall",
+    "-q",
+    "app",
+    "tests",
+]
+PYTHON_MEMORY_GROUNDING_COMMAND = [
+    sys.executable,
+    "-m",
+    "pytest",
+    "tests/qa/test_memory_grounding.py",
+    "-q",
+    "--confcutdir=tests/qa",
+]
+PYTHON_CITATION_GUARD_COMMAND = [
+    sys.executable,
+    "-m",
+    "pytest",
+    "tests/qa/test_answer_finalizer.py",
+    "tests/qa/test_pipeline.py",
+    "-q",
+    "--confcutdir=tests/qa",
+]
+PYTHON_ATOMIC_TURN_COMMAND = [
+    sys.executable,
+    "-m",
+    "pytest",
+    "tests/conversations/test_atomic_turn.py",
+    "-q",
+    "--confcutdir=tests/conversations",
+]
+PYTHON_CHAT_CONTRACT_COMMAND = [
+    sys.executable,
+    "-m",
+    "pytest",
+    "tests/qa/test_chat_contract.py",
+    "-q",
+    "--confcutdir=tests/qa",
+]
+PYTHON_CANONICAL_EXPAND_COMMAND = [
+    sys.executable,
+    "-m",
+    "pytest",
+    "tests/qa/test_canonical_expand.py",
+    "-q",
+    "--confcutdir=tests/qa",
+]
+
+AGENTIC_RAG_BRANCH_COMMANDS = {
+    "feat/qa-memory-grounding": [
+        PYTHON_COMPILE_COMMAND,
+        PYTHON_MEMORY_GROUNDING_COMMAND,
+        PYTHON_RUN_TASKS_COMMAND,
+    ],
+    "feat/qa-citation-guard": [
+        PYTHON_COMPILE_COMMAND,
+        PYTHON_CITATION_GUARD_COMMAND,
+    ],
+    "feat/conversation-atomic-turn": [
+        PYTHON_COMPILE_COMMAND,
+        PYTHON_ATOMIC_TURN_COMMAND,
+        PYTHON_CHAT_CONTRACT_COMMAND,
+        PYTHON_RUN_TASKS_COMMAND,
+    ],
+    "feat/qa-canonical-expand": [
+        PYTHON_COMPILE_COMMAND,
+        PYTHON_CANONICAL_EXPAND_COMMAND,
+    ],
+}
 
 BRANCH_SCOPES = {
     "feat/frontend-quality": ("frontend/",),
@@ -121,6 +192,45 @@ BRANCH_SCOPES = {
     "feat/graph-experience": (
         "frontend/",
         "frontend/DEVLOG.md",
+    ),
+    "feat/qa-memory-grounding": (
+        "backend/app/qa/__init__.py",
+        "backend/app/qa/agent.py",
+        "backend/app/qa/pipeline.py",
+        "backend/app/qa/prompt.py",
+        "backend/app/qa/question_rewrite.py",
+        "backend/app/runs/tasks.py",
+        "backend/tests/qa/test_memory_grounding.py",
+        "backend/tests/runs/test_tasks.py",
+        "backend/DEVLOG.md",
+    ),
+    "feat/qa-citation-guard": (
+        "backend/app/qa/agent.py",
+        "backend/app/qa/finalize.py",
+        "backend/app/qa/pipeline.py",
+        "backend/tests/qa/test_answer_finalizer.py",
+        "backend/tests/qa/test_pipeline.py",
+        "backend/DEVLOG.md",
+    ),
+    "feat/conversation-atomic-turn": (
+        "backend/app/conversations/__init__.py",
+        "backend/app/conversations/models.py",
+        "backend/app/conversations/store.py",
+        "backend/app/routers/chat.py",
+        "backend/app/runs/tasks.py",
+        "backend/tests/conversations/test_atomic_turn.py",
+        "backend/tests/conversations/test_store.py",
+        "backend/tests/qa/test_chat_contract.py",
+        "backend/tests/runs/test_tasks.py",
+        "backend/DEVLOG.md",
+    ),
+    "feat/qa-canonical-expand": (
+        "backend/app/qa/agent.py",
+        "backend/app/qa/expand.py",
+        "backend/app/qa/models.py",
+        "backend/tests/qa/test_canonical_expand.py",
+        "backend/tests/qa/test_expand.py",
+        "backend/DEVLOG.md",
     ),
 }
 
@@ -198,7 +308,16 @@ def _npm_script_exists(repo: Path, script: str) -> bool:
 
 
 def _command_cwd(command: list[str], repo: Path) -> Path:
-    if command in (PYTHON_RESOLUTION_COMMAND, PYTHON_RUN_TASKS_COMMAND):
+    backend_commands = [
+        PYTHON_RESOLUTION_COMMAND,
+        PYTHON_RUN_TASKS_COMMAND,
+        *(
+            command
+            for commands in AGENTIC_RAG_BRANCH_COMMANDS.values()
+            for command in commands
+        ),
+    ]
+    if command in backend_commands:
         return repo / "backend"
     if command[0] == NPM_EXECUTABLE:
         return repo / "frontend"
@@ -346,6 +465,12 @@ def commands_for_paths(
     )
     if graph_changed and not resolution_schema_changed:
         commands.append(PYTHON_GRAPH_COMMAND)
+    if paths:
+        branch_commands = AGENTIC_RAG_BRANCH_COMMANDS.get(branch or "", [])
+        commands = [
+            *branch_commands,
+            *(command for command in commands if command not in branch_commands),
+        ]
     return commands
 
 

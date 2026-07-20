@@ -16,10 +16,11 @@ Hook 的通用入口使用 `python3`，Windows 则通过 `commandWindows` 使用
 
 - 收集 `main...HEAD`、未暂存和已暂存的改动路径，按首次出现顺序去重；
 - 检查工作树是否干净，并分别运行提交、未暂存和已暂存差异的 `git diff --check`；
-- 对三条固定工作线检查文件范围；尾随 `/` 的目录白名单允许前缀匹配，文件白名单只允许精确匹配，防止 `.bak` 或伪子路径越权；
+- 对已注册的固定工作线检查文件范围；尾随 `/` 的目录白名单允许前缀匹配，文件白名单只允许精确匹配，防止 `.bak` 或伪子路径越权；
 - `frontend/` 改动选择 lint、typecheck、Vitest 和构建，`evals/`/评估文档改动选择评估单测，Hook/审计测试改动选择审计单测；
 - Windows 上 Python 子进程使用 `npm.cmd` 启动 npm，避开 PATH 中无法被 `subprocess.run` 直接执行的 extensionless POSIX launcher；非 Windows 仍使用标准 `npm`；
 - Python 单测命令使用启动 Hook 的 `sys.executable -m pytest`，复用已经选定的环境，不在 Windows `commandWindows` 外层之内再次嵌套 `conda run`；
+- Agentic RAG 正确性分支先从 `backend/` 运行一次 `compileall`，再运行该分支的无模型、无数据库确定性 pytest；`compileall` 只检查 Python 语法，不替代行为测试；
 - 非前端质量分支缺少某个 npm script 时明确记录为跳过，避免无关分支因尚未合并的前端脚本失败。
 
 门禁本身不修改源码、不提交、不合并、不推送，也不读取或输出 `.env`、不访问真实 LLM 等外部服务。它选择的 `npm run build` 和 pytest 可能生成被 gitignore 的构建目录、测试缓存或字节码，这些属于验证命令的本地产物，而不是源码改动。
@@ -71,3 +72,16 @@ the service-free cases in `backend/tests/runs/test_tasks.py` with the runs-local
 fixtures; the existing conversation persistence case remains a separate live-Neo4j
 integration test. These commands use the interpreter that
 started the hook, so Windows does not add a second Conda wrapper.
+
+## Agentic RAG correctness worktree scopes
+
+本轮正确性加固按依赖顺序使用四条固定分支。生产代码使用精确文件白名单，测试也只允许写入对应的聚焦用例；所有分支都可追加 `backend/DEVLOG.md`，但不能借 DEVLOG 范围修改其他板块。
+
+- `feat/qa-memory-grounding`：拥有问题改写模块、QA Agent/线性降级/prompt 接线、`run_chat` 编排，以及 `test_memory_grounding.py`、`test_tasks.py`。门禁从 `backend/` 编译 Python 后，运行无真实 LLM 的历史指代用例和排除 live-Neo4j 用例的 runs 测试。
+- `feat/qa-citation-guard`：拥有共享答案 finalizer、Agentic/线性 pipeline 接线，以及 finalizer/pipeline 聚焦测试。它不能修改会话持久化或运行任务。
+- `feat/conversation-atomic-turn`：拥有会话模型/存储、chat 会话存在性检查、`run_chat` 原子写回接线，以及原子事务、chat 契约和 runs 聚焦测试。既有 `test_store.py` 可增加真实 Neo4j 补充验证，但确定性门禁只运行 fake transaction 套件。
+- `feat/qa-canonical-expand`：拥有 QA 关系模型、关系扩展、Agent 工具分发接线，以及 deterministic canonical expansion 和既有 live-Neo4j expansion 测试。门禁只运行 fake-driver 套件；真实 Neo4j 的只读指纹验证留给分支主审和最终验收。
+
+四条分支的确定性命令不会连接外部 LLM，不依赖个人 Neo4j，也不会读取 `.env`。P/Q/S/R 的合并次序仍由执行规划和主仓库控制；audit gate 只根据当前分支和改动路径选择门禁，不负责判断业务规格是否完整。
+
+与仓库里其他 audit gate 一样，这些新范围是受信任协作中的质量护栏，而不是安全沙箱。功能分支仍能修改自己执行的 Python 测试或业务代码，`compileall` 也只证明语法可编译；因此门禁通过不能替代主仓库阅读完整 diff、检查测试是否覆盖验收条件，以及运行真实 Neo4j 和端到端回归。
