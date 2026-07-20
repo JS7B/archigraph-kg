@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from app.clients import llm
 from app.graph.search import ChunkHit, search_chunks
 from app.qa.context import build_context
-from app.qa.expand import expand_entities
+from app.qa.expand import expand_entities, merge_canonical_paths
 from app.qa.finalize import finalize_answer
 from app.qa.models import Answer, RelationPath
 from app.qa.prompt import build_answer_messages
@@ -172,18 +172,33 @@ def _dispatch_tool(
                 evidence_pool[c.chunk_id] = c  # 去重累积，保留 provenance
             return _chunks_to_tool_text(chunks)
         if name == "expand_entity":
-            chunk_ids = arguments["chunk_ids"]
-            ctx = expand_entities(driver, chunk_ids, database=database)
-            # 去重累积关系路径（按四元组判重）
-            existing = {(p.source_name, p.target_name, p.type, p.evidence_chunk_id) for p in paths_acc}
-            for p in ctx.paths:
-                key = (p.source_name, p.target_name, p.type, p.evidence_chunk_id)
-                if key not in existing:
-                    paths_acc.append(p)
-                    existing.add(key)
+            requested = arguments.get("chunk_ids")
+            if not isinstance(requested, list):
+                return "Invalid expansion chunk IDs: expected a list from current evidence."
+            requested_ids = {
+                chunk_id.strip()
+                for chunk_id in requested
+                if isinstance(chunk_id, str) and chunk_id.strip()
+            }
+            valid_ids = sorted(requested_ids.intersection(evidence_pool))
+            ignored_count = len(requested_ids) - len(valid_ids)
+            if not valid_ids:
+                return "Invalid expansion chunk IDs: none exist in the current evidence pool."
+            ctx = expand_entities(driver, valid_ids, database=database)
+            paths_acc[:] = merge_canonical_paths([*paths_acc, *ctx.paths])
+            ignored_note = (
+                f" Ignored {ignored_count} chunk ID(s) outside current evidence."
+                if ignored_count
+                else ""
+            )
             if not ctx.paths:
-                return "未找到这些片段涉及的实体关系。"
-            return "\n".join(f"{p.source_name} -[{p.type}]-> {p.target_name}" for p in ctx.paths)
+                return f"未找到这些片段涉及的 accepted 规范实体关系。{ignored_note}"
+            relation_text = "\n".join(
+                f"{p.source_name} -[{p.type}]-> {p.target_name}"
+                f" (support={p.support_count})"
+                for p in ctx.paths
+            )
+            return f"{relation_text}{ignored_note}"
         return f"未知工具: {name}"
     except Exception as exc:  # noqa: BLE001 — 工具失败回传错误，不中断循环
         logger.warning("工具 %s 执行失败：%s", name, exc)

@@ -36,6 +36,16 @@ class Answer(_CamelModel):
     citations: list[Citation] = Field(default_factory=list)
 
 
+class RelationProvenance(BaseModel):
+    """One validated source fact supporting a projected canonical relation."""
+
+    document_id: str
+    evidence_chunk_id: str
+    source_entity_id: str
+    target_entity_id: str
+    confidence: float | None = None
+
+
 class RelationPath(BaseModel):
     """一条实体关系路径（1 跳），用于答案展示与上下文。"""
 
@@ -43,6 +53,12 @@ class RelationPath(BaseModel):
     target_name: str
     type: str
     evidence_chunk_id: str
+    path_id: str = ""
+    source_canonical_id: str | None = None
+    target_canonical_id: str | None = None
+    support_count: int = Field(default=1, ge=1)
+    provenance: list[RelationProvenance] = Field(default_factory=list)
+    provenance_truncated: bool = False
 
 
 class RetrievalContext(BaseModel):

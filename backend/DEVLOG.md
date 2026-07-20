@@ -452,3 +452,10 @@
 - 为什么需要：原来的 `max(turn_index)+1` 与两次单消息写入会让并发问答拿到相同索引，也可能在第二条写失败时留下只有问题没有回答的半轮历史，后续记忆因此失真。
 - 为什么这么做：事务先用真实递增的内部属性取得 Conversation 写锁，再以 `message_count` 兼容初始化单调 counter；锁内先查同一 `run_id` 的完整消息对，未命中才一次写入两条 Message、两条 `HAS_MESSAGE` 并更新精确计数。消息 ID 由会话、Run 和角色生成确定性 UUID，但对外仍视为不透明值。
 - 踩了什么坑：把属性设置成原值可能被数据库视为无有效变化，不能可靠充当并发锁；因此锁属性每次都真实递增。另一个容易遗漏的边界是删除会话发生在 LLM 回答之后，事务必须把“会话不存在”作为失败抛回后台任务，确保 Run 只在提交完成后才进入 succeeded。
+
+## 2026-07-20 用 accepted 规范关系约束 QA 图扩展
+- 做了什么：把 QA 的一跳 source Entity 扩展改为只读 canonical 投影；Agent 先把模型给出的 chunk ID 与本轮 evidence pool 求交，再从这些 chunk 中证据有效的 canonical 身份出发，聚合跨文档的有向关系路径及有限来源。
+- 这是什么：canonical 投影不是在 Neo4j 里再写一层关系，而是查询时用 `RESOLVES_TO` 把文档级实体映射到稳定身份，并把方向与关系类型相同的真实 source facts 临时合成一条路径；`support_count` 表示来源事实数，provenance 保存最多五条可复核的文档、chunk 与源端点。
+- 为什么需要：旧查询只要 chunk 提及了源实体就会沿 `RELATES` 返回邻居，review/unresolved 节点、伪造证据或模型编造的过期 chunk ID 都可能进入回答上下文；不同文档的同一关系也会机械重复，降低图上下文质量。
+- 为什么这么做：selected chunk、两端 resolution 和 relation 各自都必须由真实 `Document-HAS_CHUNK-MENTIONS` 链证明，关系证据还要与两端同文档并同时提及两端；稳定路径 ID 按 canonical source、target、relation type 生成，跨次工具调用用 provenance 并集合并，因此重试不膨胀、后来文档也不会丢失。关系路径只作辅助上下文，Citation 仍只来自本轮向量召回 chunk。
+- 踩了什么坑：不能假设 review 写入一定已经删掉旧 `RESOLVES_TO`，脏图里可能残留边，所以查询还要显式拒绝带 resolution 状态的端点；测试清理也不能只按 `document_id`，因为 CanonicalEntity 没有该字段，必须再按本测试专用 `canonical_id` 前缀清理并验证归零。真实 Neo4j 指纹测试同时证明查询前后节点与关系完全一致、canonical `RELATES` 始终为零。
