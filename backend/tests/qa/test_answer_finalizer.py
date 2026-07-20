@@ -90,6 +90,26 @@ def test_markers_inside_inline_and_fenced_code_are_not_citations_or_rewritten():
     assert answer.confidence == "medium"
 
 
+def test_single_backtick_code_span_can_cross_lines_without_rewriting_markers():
+    text = "`code\n[99]\n`\n正文 [1]"
+
+    answer = finalize_answer(text, [_citation(1)])
+
+    assert answer.text == text
+    assert [citation.index for citation in answer.citations] == [1]
+    assert answer.confidence == "medium"
+
+
+def test_multi_backtick_code_span_can_cross_lines_without_rewriting_markers():
+    text = "``code with ` delimiter\n[0] 与 [99]\n``\n正文 [1]"
+
+    answer = finalize_answer(text, [_citation(1)])
+
+    assert answer.text == text
+    assert [citation.index for citation in answer.citations] == [1]
+    assert answer.confidence == "medium"
+
+
 def test_code_only_markers_do_not_prevent_fixed_refusal():
     answer = finalize_answer(
         "示例：`[1]`。\n~~~text\n[2]\n~~~",
@@ -111,3 +131,16 @@ def test_non_integer_brackets_are_left_untouched():
 
     assert answer.text == text
     assert [citation.index for citation in answer.citations] == [1]
+
+
+def test_extremely_long_numeric_marker_is_removed_without_integer_conversion():
+    marker = "9" * 5000
+
+    answer = finalize_answer(
+        f"有效 [1]，无效 [{marker}]。",
+        [_citation(1)],
+    )
+
+    assert answer.text == "有效 [1]，无效 。"
+    assert [citation.index for citation in answer.citations] == [1]
+    assert answer.confidence == "medium"
