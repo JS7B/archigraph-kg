@@ -300,6 +300,127 @@ def test_new_quality_worktree_scopes_block_paths_outside_their_ownership(tmp_pat
         assert any(f"outside {branch} scope" in item for item in report.failures)
 
 
+def test_agentic_rag_worktree_scopes_accept_owned_paths_and_reject_unrelated_paths(
+    tmp_path,
+):
+    cases = [
+        (
+            "feat/qa-memory-grounding",
+            [
+                "backend/app/qa/question_rewrite.py",
+                "backend/tests/qa/test_memory_grounding.py",
+            ],
+            "backend/app/conversations/store.py",
+        ),
+        (
+            "feat/qa-citation-guard",
+            [
+                "backend/app/qa/finalize.py",
+                "backend/tests/qa/test_answer_finalizer.py",
+            ],
+            "backend/app/runs/tasks.py",
+        ),
+        (
+            "feat/conversation-atomic-turn",
+            [
+                "backend/app/conversations/store.py",
+                "backend/tests/conversations/test_atomic_turn.py",
+            ],
+            "backend/app/qa/agent.py",
+        ),
+        (
+            "feat/qa-canonical-expand",
+            [
+                "backend/app/qa/expand.py",
+                "backend/tests/qa/test_canonical_expand.py",
+            ],
+            "backend/app/conversations/store.py",
+        ),
+    ]
+
+    def pass_command(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 0, "passed", "")
+
+    for branch, allowed_paths, forbidden_path in cases:
+        repo = tmp_path / branch.replace("/", "-")
+        init_repo(repo)
+        run_git(repo, "switch", "-c", branch)
+        for allowed_path in allowed_paths:
+            commit_path(repo, allowed_path)
+        report = audit_repository(repo, run_command=pass_command)
+        assert not any("outside" in item for item in report.failures)
+
+        commit_path(repo, forbidden_path)
+        report = audit_repository(repo, run_command=pass_command)
+        assert any(f"outside {branch} scope" in item for item in report.failures)
+
+
+def test_agentic_rag_branches_select_compile_and_focused_deterministic_gates():
+    cases = {
+        "feat/qa-memory-grounding": {
+            "path": "backend/app/runs/tasks.py",
+            "pytest_targets": [
+                "tests/qa/test_memory_grounding.py",
+                "tests/runs/test_tasks.py",
+            ],
+        },
+        "feat/qa-citation-guard": {
+            "path": "backend/app/qa/finalize.py",
+            "pytest_targets": ["tests/qa/test_answer_finalizer.py"],
+        },
+        "feat/conversation-atomic-turn": {
+            "path": "backend/app/conversations/store.py",
+            "pytest_targets": [
+                "tests/conversations/test_atomic_turn.py",
+                "tests/qa/test_chat_contract.py",
+                "tests/runs/test_tasks.py",
+            ],
+        },
+        "feat/qa-canonical-expand": {
+            "path": "backend/app/qa/expand.py",
+            "pytest_targets": ["tests/qa/test_canonical_expand.py"],
+        },
+    }
+
+    for branch, case in cases.items():
+        commands = commands_for_paths([case["path"]], branch=branch)
+        rendered = [" ".join(command) for command in commands]
+
+        assert " -m compileall " in f" {rendered[0]} "
+        assert sum(" -m compileall " in f" {command} " for command in rendered) == 1
+        for target in case["pytest_targets"]:
+            assert sum(target in command for command in rendered) == 1
+        assert all("test_agent.py" not in command for command in rendered)
+
+
+def test_agentic_rag_branch_gates_run_from_backend_directory(tmp_path):
+    cases = {
+        "feat/qa-memory-grounding": "backend/app/qa/agent.py",
+        "feat/qa-citation-guard": "backend/app/qa/finalize.py",
+        "feat/conversation-atomic-turn": "backend/app/conversations/store.py",
+        "feat/qa-canonical-expand": "backend/app/qa/expand.py",
+    }
+
+    for branch, changed_path in cases.items():
+        repo = tmp_path / branch.replace("/", "-")
+        init_repo(repo)
+        run_git(repo, "switch", "-c", branch)
+        commit_path(repo, changed_path)
+        calls: list[tuple[list[str], Path]] = []
+
+        def run_command(
+            command: list[str], cwd: Path
+        ) -> subprocess.CompletedProcess[str]:
+            calls.append((command, cwd))
+            return subprocess.CompletedProcess(command, 0, "passed", "")
+
+        report = audit_repository(repo, run_command=run_command)
+
+        assert report.failures == []
+        assert calls
+        assert all(cwd == repo / "backend" for _, cwd in calls)
+
+
 def test_npm_launcher_uses_cmd_only_on_windows():
     assert npm_executable("win32") == "npm.cmd"
     assert npm_executable("linux") == "npm"
