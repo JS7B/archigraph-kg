@@ -31,6 +31,15 @@ def _find_code_span_end(text: str, start: int, run_length: int) -> int | None:
         cursor = after
 
 
+def _opening_backticks_are_escaped(text: str, start: int) -> bool:
+    backslashes = 0
+    cursor = start - 1
+    while cursor >= 0 and text[cursor] == "\\":
+        backslashes += 1
+        cursor -= 1
+    return backslashes % 2 == 1
+
+
 def _sanitize_plain_text(
     text: str,
     available: set[str],
@@ -69,6 +78,9 @@ def _sanitize_code_spans(
         run_end = cursor + 1
         while run_end < len(text) and text[run_end] == "`":
             run_end += 1
+        if _opening_backticks_are_escaped(text, cursor):
+            cursor = run_end
+            continue
         code_end = _find_code_span_end(text, cursor, run_end - cursor)
         if code_end is None:
             cursor = run_end
@@ -117,6 +129,11 @@ def _sanitize_markers(text: str, available: set[str]) -> tuple[str, set[str], bo
         if opening:
             flush_plain_lines()
             fence_marker = opening.group(1)
+            output.append(line)
+            continue
+
+        if line.startswith("    ") or line.startswith("\t"):
+            flush_plain_lines()
             output.append(line)
             continue
 

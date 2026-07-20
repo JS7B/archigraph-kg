@@ -110,6 +110,46 @@ def test_multi_backtick_code_span_can_cross_lines_without_rewriting_markers():
     assert answer.confidence == "medium"
 
 
+def test_odd_backslash_escapes_opening_backticks():
+    text = r"\`literal [1][2]\`，正文无效 [99]。"
+
+    answer = finalize_answer(text, [_citation(1), _citation(2)])
+
+    assert answer.text == r"\`literal [1][2]\`，正文无效 。"
+    assert [citation.index for citation in answer.citations] == [1, 2]
+    assert answer.confidence == "medium"
+
+
+def test_even_backslashes_allow_opening_and_backslash_does_not_escape_closing():
+    text = r"\\`code [99]\`，正文无效 [88]，依据 [1][2]。"
+
+    answer = finalize_answer(text, [_citation(1), _citation(2)])
+
+    assert answer.text == r"\\`code [99]\`，正文无效 ，依据 [1][2]。"
+    assert [citation.index for citation in answer.citations] == [1, 2]
+    assert answer.confidence == "medium"
+
+
+def test_indented_code_blocks_do_not_contribute_or_rewrite_markers():
+    text = (
+        "正文依据 [1][2]。\n"
+        "    spaces = [0], [99]\n"
+        "\ttabbed = [0], [88]\n"
+        "正文收尾。"
+    )
+
+    answer = finalize_answer(text, [_citation(1), _citation(2)])
+
+    assert answer.text == (
+        "正文依据 [1][2]。\n"
+        "    spaces = [0], [99]\n"
+        "\ttabbed = [0], [88]\n"
+        "正文收尾。"
+    )
+    assert [citation.index for citation in answer.citations] == [1, 2]
+    assert answer.confidence == "high"
+
+
 def test_code_only_markers_do_not_prevent_fixed_refusal():
     answer = finalize_answer(
         "示例：`[1]`。\n~~~text\n[2]\n~~~",
