@@ -8,6 +8,9 @@ NO_EVIDENCE_ANSWER = "根据现有资料无法回答。"
 
 _MARKER_RE = re.compile(r"\[([0-9]+)\]")
 _FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_TOP_LEVEL_LIST_RE = re.compile(
+    r"^ {0,3}(?:[-+*]|[0-9]{1,9}[.)])(?:[ \t]+|$)"
+)
 
 
 def _closing_fence(line: str, marker: str) -> bool:
@@ -100,12 +103,16 @@ def _sanitize_code_spans(
 
 
 def _sanitize_markers(text: str, available: set[str]) -> tuple[str, set[str], bool]:
-    """一次扫描正文角标；Markdown code span/fence 不参与引用语义。"""
+    """一次扫描正文角标；Markdown code span/顶层代码块不参与引用语义。"""
     output: list[str] = []
     written: set[str] = set()
     had_invalid = False
     fence_marker: str | None = None
     plain_lines: list[str] = []
+    at_document_start = True
+    previous_line_blank = False
+    in_indented_code = False
+    in_list_container = False
 
     def flush_plain_lines() -> None:
         nonlocal had_invalid
@@ -119,25 +126,52 @@ def _sanitize_markers(text: str, available: set[str]) -> tuple[str, set[str], bo
         had_invalid = had_invalid or invalid
 
     for line in text.splitlines(keepends=True):
+        line_blank = not line.strip()
+        line_indented = line.startswith("    ") or line.startswith("\t")
+
         if fence_marker is not None:
             output.append(line)
             if _closing_fence(line, fence_marker):
                 fence_marker = None
+            at_document_start = False
+            previous_line_blank = line_blank
             continue
+
+        if in_indented_code:
+            if line_indented or line_blank:
+                output.append(line)
+                at_document_start = False
+                previous_line_blank = line_blank
+                continue
+            in_indented_code = False
 
         opening = _FENCE_OPEN_RE.match(line)
         if opening:
             flush_plain_lines()
             fence_marker = opening.group(1)
+            in_list_container = False
             output.append(line)
+            at_document_start = False
+            previous_line_blank = line_blank
             continue
 
-        if line.startswith("    ") or line.startswith("\t"):
-            flush_plain_lines()
-            output.append(line)
-            continue
+        if _TOP_LEVEL_LIST_RE.match(line):
+            in_list_container = True
+            plain_lines.append(line)
+        elif in_list_container and (line_blank or line_indented):
+            plain_lines.append(line)
+        else:
+            if in_list_container:
+                in_list_container = False
+            if line_indented and (at_document_start or previous_line_blank):
+                flush_plain_lines()
+                in_indented_code = True
+                output.append(line)
+            else:
+                plain_lines.append(line)
 
-        plain_lines.append(line)
+        at_document_start = False
+        previous_line_blank = line_blank
 
     flush_plain_lines()
     return "".join(output), written, had_invalid

@@ -1,5 +1,7 @@
 """共享答案 finalizer 的确定性边界测试。"""
 
+import pytest
+
 from app.qa.finalize import NO_EVIDENCE_ANSWER, finalize_answer
 from app.qa.models import Citation
 
@@ -130,24 +132,48 @@ def test_even_backslashes_allow_opening_and_backslash_does_not_escape_closing():
     assert answer.confidence == "medium"
 
 
-def test_indented_code_blocks_do_not_contribute_or_rewrite_markers():
+def test_top_level_indented_code_block_at_document_start_is_protected():
     text = (
-        "正文依据 [1][2]。\n"
         "    spaces = [0], [99]\n"
         "\ttabbed = [0], [88]\n"
-        "正文收尾。"
+        "正文依据 [1][2]。"
     )
 
     answer = finalize_answer(text, [_citation(1), _citation(2)])
 
     assert answer.text == (
-        "正文依据 [1][2]。\n"
         "    spaces = [0], [99]\n"
         "\ttabbed = [0], [88]\n"
-        "正文收尾。"
+        "正文依据 [1][2]。"
     )
     assert [citation.index for citation in answer.citations] == [1, 2]
     assert answer.confidence == "high"
+
+
+def test_top_level_indented_code_block_can_start_after_blank_line():
+    text = "正文依据 [1][2]。\n\n    code = [0], [99]\n正文收尾。"
+
+    answer = finalize_answer(text, [_citation(1), _citation(2)])
+
+    assert answer.text == text
+    assert [citation.index for citation in answer.citations] == [1, 2]
+    assert answer.confidence == "high"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "普通段落\n    续行依据 [1]。",
+        "- list item\n    续行依据 [1]。",
+        "- parent\n\n    - nested item 依据 [1]。",
+    ],
+)
+def test_non_code_indentation_still_contributes_valid_markers(text):
+    answer = finalize_answer(text, [_citation(1)])
+
+    assert answer.text == text
+    assert [citation.index for citation in answer.citations] == [1]
+    assert answer.confidence == "medium"
 
 
 def test_code_only_markers_do_not_prevent_fixed_refusal():
