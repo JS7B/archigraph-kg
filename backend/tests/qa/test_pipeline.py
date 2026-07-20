@@ -1,6 +1,7 @@
 """问答编排：串起全链，只保留答案里真实出现的角标 citation，confidence 计算。"""
 
 from app.graph.search import ChunkHit
+from app.qa import agent as agent_mod
 from app.qa import pipeline as pipeline_mod
 from app.qa.models import RelationPath, RetrievalContext
 from app.qa.pipeline import answer_question
@@ -59,3 +60,22 @@ def test_empty_recall_returns_low(monkeypatch):
     ans = answer_question(None, "问题")
     assert ans.confidence == "low"
     assert ans.citations == []
+
+
+def test_agentic_and_linear_generation_share_finalization(monkeypatch):
+    answer_text = "有效 [1][2]，越界 [9]。"
+    _patch_chain(monkeypatch, answer_text=answer_text)
+    monkeypatch.setattr(agent_mod.llm, "chat", lambda messages: answer_text)
+
+    linear = answer_question(None, "问题")
+    agentic = agent_mod._generate_final_answer(
+        None,
+        "问题",
+        {hit.chunk_id: hit for hit in [_hit(0), _hit(1), _hit(2)]},
+        [],
+    )
+
+    assert agentic == linear
+    assert agentic.text == "有效 [1][2]，越界 。"
+    assert agentic.confidence == "medium"
+    assert [citation.index for citation in agentic.citations] == [1, 2]

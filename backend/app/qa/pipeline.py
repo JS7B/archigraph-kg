@@ -5,36 +5,18 @@
 """
 
 import logging
-import re
-
 from neo4j import Driver
 
 from app.clients import llm
 from app.graph.search import search_chunks
 from app.qa.context import build_context
 from app.qa.expand import expand_entities
-from app.qa.models import Answer, Citation
+from app.qa.finalize import finalize_answer
+from app.qa.models import Answer
 from app.qa.prompt import build_answer_messages
 from app.qa.rerank import rerank_chunks
 
 logger = logging.getLogger(__name__)
-
-_CITE_RE = re.compile(r"\[(\d+)\]")
-
-
-def _used_indices(text: str) -> set[int]:
-    """提取答案正文中实际出现的角标编号。"""
-    return {int(n) for n in _CITE_RE.findall(text)}
-
-
-def _confidence(used: set[int], total: int) -> str:
-    """按被引用比例与数量给出粗略置信度。"""
-    if not used:
-        return "low"
-    if len(used) >= 2:
-        return "high"
-    return "medium"
-
 
 def answer_question(
     driver: Driver,
@@ -51,7 +33,7 @@ def answer_question(
     query_embedding = llm.embed([search_question])[0]
     hits = search_chunks(driver, query_embedding, top_k=top_k, database=database)
     if not hits:
-        return Answer(text="根据现有资料无法回答。", confidence="low", citations=[])
+        return finalize_answer("", [])
 
     reranked = rerank_chunks(search_question, hits, top_n=rerank_top_n)
     context_obj = expand_entities(
@@ -68,6 +50,4 @@ def answer_question(
         )
     )
 
-    used = _used_indices(text)
-    cited = [c for c in citations if c.index in used] if used else []
-    return Answer(text=text, confidence=_confidence(used, len(citations)), citations=cited)
+    return finalize_answer(text, citations)
