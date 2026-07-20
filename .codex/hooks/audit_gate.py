@@ -99,6 +99,7 @@ PYTHON_CITATION_GUARD_COMMAND = [
     "-m",
     "pytest",
     "tests/qa/test_answer_finalizer.py",
+    "tests/qa/test_pipeline.py",
     "-q",
     "--confcutdir=tests/qa",
 ]

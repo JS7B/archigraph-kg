@@ -366,7 +366,10 @@ def test_agentic_rag_branches_select_compile_and_focused_deterministic_gates():
         },
         "feat/qa-citation-guard": {
             "path": "backend/app/qa/finalize.py",
-            "pytest_targets": ["tests/qa/test_answer_finalizer.py"],
+            "pytest_targets": [
+                "tests/qa/test_answer_finalizer.py",
+                "tests/qa/test_pipeline.py",
+            ],
         },
         "feat/conversation-atomic-turn": {
             "path": "backend/app/conversations/store.py",
