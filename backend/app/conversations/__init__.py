@@ -3,7 +3,9 @@
 from app.conversations.models import Conversation, Message
 from app.conversations.store import (
     DEFAULT_TITLE,
+    ConversationNotFound,
     add_message,
+    append_turn,
     create_conversation,
     delete_conversation,
     get_conversation,
@@ -16,8 +18,10 @@ __all__ = [
     "Conversation",
     "Message",
     "DEFAULT_TITLE",
+    "ConversationNotFound",
     "create_conversation",
     "add_message",
+    "append_turn",
     "get_messages",
     "list_conversations",
     "get_conversation",

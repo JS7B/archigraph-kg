@@ -72,9 +72,12 @@ async def chat(
     else:
         # 「新建」按钮建的空会话仍是缺省标题：首问时用问题命名（手动改过名则不覆盖）
         conversation = get_conversation(driver, conversation_id)
+        if conversation is None:
+            raise HTTPException(
+                status_code=404, detail=f"会话不存在: {conversation_id}"
+            )
         if (
-            conversation is not None
-            and conversation.message_count == 0
+            conversation.message_count == 0
             and conversation.title == DEFAULT_TITLE
         ):
             rename_conversation(driver, conversation_id, _derive_title(body.question))

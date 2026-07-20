@@ -24,7 +24,7 @@ class Message(_CamelModel):
     """一条对话消息（user 或 agent）。
 
     citations / confidence 仅 agent 消息携带，user 消息为空列表 / None。
-    message_id 确定性：f"{conversation_id}#{turn_index}"，turn_index 从 1 起。
+    message_id 是对外不透明标识；调用方不得从它推断 turn_index。turn_index 从 1 起。
     """
 
     message_id: str
