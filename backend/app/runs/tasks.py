@@ -22,7 +22,7 @@ from neo4j import Driver
 
 from app.clients import llm
 from app.conversations import (
-    add_message,
+    append_turn,
     create_conversation,
     get_messages,
 )
@@ -206,16 +206,17 @@ async def _run_chat_agentic(
                 retrieval_question=retrieval_question,
             )
 
-    # 写回本轮两条消息（user + agent），各 embed 一次（问答都向量化，供后续召回）
-    user_embedding = await asyncio.to_thread(embed_texts, [question])
+    # 在开启写事务前一次生成有序的 user/agent embedding；模型调用失败时图中零写入。
+    embeddings = await asyncio.to_thread(embed_texts, [question, answer.text])
     await asyncio.to_thread(
-        add_message, driver, conversation_id,
-        role="user", text=question, embedding=user_embedding[0],
-    )
-    agent_embedding = await asyncio.to_thread(embed_texts, [answer.text])
-    await asyncio.to_thread(
-        add_message, driver, conversation_id,
-        role="agent", text=answer.text, embedding=agent_embedding[0],
+        append_turn,
+        driver,
+        conversation_id,
+        run_id=run_id,
+        user_text=question,
+        agent_text=answer.text,
+        user_embedding=embeddings[0],
+        agent_embedding=embeddings[1],
         citations=answer.citations, confidence=answer.confidence,
     )
     return answer

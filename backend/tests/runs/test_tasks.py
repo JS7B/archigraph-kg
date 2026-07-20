@@ -111,10 +111,10 @@ async def test_run_chat_agentic_forwards_on_step_events(monkeypatch):
         return _fake_answer()
 
     monkeypatch.setattr(tasks_mod, "answer_question_agentic", _agentic)
-    # stub 会话读写（不连图谱），返回空历史、空写入
+    # stub 会话读写（不连图谱），返回空历史、原子整轮写入
     monkeypatch.setattr(tasks_mod, "get_messages", lambda *a, **kw: [])
-    monkeypatch.setattr(tasks_mod, "add_message", lambda *a, **kw: None)
-    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8])
+    monkeypatch.setattr(tasks_mod, "append_turn", lambda *a, **kw: None)
+    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8] * 2)
     store = RunStore()
     run = store.create_run(RunKind.CHAT)
 
@@ -140,8 +140,8 @@ async def test_run_chat_falls_back_to_linear_on_unsupported_tools(monkeypatch):
     monkeypatch.setattr(tasks_mod, "answer_question_agentic", _unsupported)
     monkeypatch.setattr(tasks_mod, "answer_question", _fake_answer)
     monkeypatch.setattr(tasks_mod, "get_messages", lambda *a, **kw: [])
-    monkeypatch.setattr(tasks_mod, "add_message", lambda *a, **kw: None)
-    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8])
+    monkeypatch.setattr(tasks_mod, "append_turn", lambda *a, **kw: None)
+    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8] * 2)
     store = RunStore()
     run = store.create_run(RunKind.CHAT)
 
@@ -202,7 +202,7 @@ async def test_run_chat_reads_history_and_writes_back(monkeypatch, ensured_schem
         return _fake_answer()
 
     monkeypatch.setattr(tasks_mod, "answer_question_agentic", _agentic)
-    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8])
+    monkeypatch.setattr(tasks_mod, "embed_texts", lambda texts: [[0.1] * 8] * 2)
     store = RunStore()
     run = store.create_run(RunKind.CHAT)
 
@@ -218,3 +218,57 @@ async def test_run_chat_reads_history_and_writes_back(monkeypatch, ensured_schem
     assert len(messages) == 3
     roles = [m.role for m in messages]
     assert roles == ["user", "user", "agent"]  # 历史 user + 本轮 user + 本轮 agent
+
+
+@pytest.mark.anyio
+async def test_run_chat_batches_embeddings_and_succeeds_only_after_turn_commit(monkeypatch):
+    embed_calls = []
+    commit_statuses = []
+    monkeypatch.setattr(tasks_mod, "get_messages", lambda *args, **kwargs: [])
+    monkeypatch.setattr(tasks_mod, "answer_question_agentic", _fake_answer)
+
+    def _embed(texts):
+        embed_calls.append(texts)
+        return [[1.0, 0.0], [0.0, 1.0]]
+
+    store = RunStore()
+    run = store.create_run(RunKind.CHAT)
+
+    def _append_turn(driver, conversation_id, **kwargs):
+        commit_statuses.append(run.status)
+        assert kwargs["run_id"] == run.id
+        assert kwargs["user_embedding"] == [1.0, 0.0]
+        assert kwargs["agent_embedding"] == [0.0, 1.0]
+
+    monkeypatch.setattr(tasks_mod, "embed_texts", _embed)
+    monkeypatch.setattr(tasks_mod, "append_turn", _append_turn)
+
+    await tasks_mod.run_chat(None, store, run.id, "question", "conv-1")
+
+    assert embed_calls == [["question", "mock answer [1]"]]
+    assert commit_statuses == [RunStatus.RUNNING]
+    assert run.status == RunStatus.SUCCEEDED
+    assert run.events[-1].stage == Stage.IDLE
+
+
+@pytest.mark.anyio
+async def test_run_chat_persistence_failure_emits_failed_not_succeeded(monkeypatch):
+    monkeypatch.setattr(tasks_mod, "get_messages", lambda *args, **kwargs: [])
+    monkeypatch.setattr(tasks_mod, "answer_question_agentic", _fake_answer)
+    monkeypatch.setattr(
+        tasks_mod, "embed_texts", lambda texts: [[1.0, 0.0], [0.0, 1.0]]
+    )
+
+    def _failed_persistence(*args, **kwargs):
+        raise RuntimeError("atomic turn commit failed")
+
+    monkeypatch.setattr(tasks_mod, "append_turn", _failed_persistence)
+    store = RunStore()
+    run = store.create_run(RunKind.CHAT)
+
+    await tasks_mod.run_chat(None, store, run.id, "question", "conv-deleted")
+
+    assert run.status == RunStatus.FAILED
+    assert run.events[-1].stage == Stage.ERROR
+    assert "atomic turn commit failed" in run.events[-1].message
+    assert all(event.status != RunStatus.SUCCEEDED for event in run.events)

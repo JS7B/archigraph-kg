@@ -6,6 +6,7 @@
 
 from app.conversations import (
     add_message,
+    append_turn,
     create_conversation,
     delete_conversation,
     get_conversation,
@@ -67,6 +68,50 @@ def test_add_message_updates_count(ensured_schema):
     add_message(driver, conv.conversation_id, role="agent", text="答", embedding=_vec())
     refreshed = get_conversation(driver, conv.conversation_id)
     assert refreshed.message_count == 2
+
+
+def test_append_turn_initializes_counter_from_legacy_message_and_is_idempotent(
+    ensured_schema,
+):
+    driver = ensured_schema
+    conv = _create_test_conversation(driver)
+    add_message(driver, conv.conversation_id, role="user", text="旧问题", embedding=_vec())
+
+    first = append_turn(
+        driver,
+        conv.conversation_id,
+        run_id="run_test_atomic",
+        user_text="追问",
+        agent_text="回答 [1]",
+        user_embedding=_vec(),
+        agent_embedding=_vec(),
+        citations=[
+            Citation(
+                index=1,
+                chunk_id="c1",
+                document_id="d1",
+                location="第1页",
+                snippet="证据",
+            )
+        ],
+        confidence="high",
+    )
+    retried = append_turn(
+        driver,
+        conv.conversation_id,
+        run_id="run_test_atomic",
+        user_text="不应覆盖",
+        agent_text="不应覆盖",
+        user_embedding=_vec(),
+        agent_embedding=_vec(),
+    )
+
+    assert [message.turn_index for message in first] == [2, 3]
+    assert [message.message_id for message in retried] == [
+        message.message_id for message in first
+    ]
+    assert [message.text for message in retried] == ["追问", "回答 [1]"]
+    assert get_conversation(driver, conv.conversation_id).message_count == 3
 
 
 def test_add_message_idempotent(ensured_schema):
