@@ -330,6 +330,21 @@
 
 验证：主仓库后端 314 passed / 4 个显式隔离 URI 用例 skipped，随后空白 Neo4j 强制 live 生命周期 4 passed；评估 42 passed；审计基础设施 31 passed；前端 lint / typecheck / 32 tests / build 通过（保留既有 Cytoscape 异步 chunk 体积警告）。个人图谱实测 121 accepted / 17 review，89 条源关系严格分为 67 projected + 22 excluded + 0 collapsed self；产生 34 个确定性主题社区，重复响应一致，查询前后源图与规范覆盖层指纹一致，规范 `RELATES` 为 0。真实 uvicorn + Vite HTTP 冒烟、CORS 与旧源接口兼容均通过。
 
+## Agentic RAG 正确性与一致性加固（2026-07-20）
+
+> 执行规格：`docs/superpowers/plans/2026-07-20-agentic-rag-correctness-hardening.md`。主仓库大脑统一评审、合并与最终验证；工人使用同级物理 worktree，仅在固定 `feat/*` 分支提交。
+
+- [ ] A `feat/audit-infrastructure`：登记四条业务分支的文件所有权与确定性门禁。
+- [ ] P `feat/qa-memory-grounding`：追问指代改写为独立检索问题，最终生成同时获得原问题、历史、独立问题和本轮证据。
+- [ ] Q `feat/qa-citation-guard`：统一有效角标校验、正文净化和基于有效 Citation 的 confidence。
+- [ ] S `feat/conversation-atomic-turn`：以 Run 为幂等键，原子分配 turn_index 并一次提交 user/agent 消息。
+- [ ] R `feat/qa-canonical-expand`：QA 关系扩展只读取 evidence_pool 内 Chunk 对应的 accepted-only canonical 关系。
+- [ ] F 主仓库终审：逐分支 diff/门禁、全量后端/评估/前端回归、隔离 Neo4j 生命周期、个人图谱只读指纹和本地多轮问答验收。
+
+执行顺序：A → P →（Q 与 S 并行）→ R → F。若出现无法归属单分支的真实集成缺陷，才条件创建 `feat/qa-integration`，不预建空分支。
+
+验证目标：强指代追问稳定命中正确主题；无效角标不能进入返回答案或抬高置信度；review/坏证据关系不能进入 QA 图扩展；并发/重试/持久化失败均不能产生重复、覆盖或半轮消息；所有改造不新增依赖、不改变前端 API 契约、不写个人源图或规范图。
+
 ## Review
 
 - 2026-06-16：将项目定位为个人知识图谱 GraphRAG Agent。确认 OpenAI-compatible 调用和 Neo4j 图谱存储，形成初始实现路线。
