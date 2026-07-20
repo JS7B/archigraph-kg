@@ -205,6 +205,8 @@ def _generate_final_answer(
     evidence_pool: dict[str, ChunkHit],
     paths_acc: list[RelationPath],
     *,
+    retrieval_question: str | None = None,
+    history: list[dict] | None = None,
     on_event: Callable[..., None] | None = None,
 ) -> Answer:
     """用证据池去重后的 chunks 生成带引用的最终答案。复用 build_context + prompt 闭环。"""
@@ -214,7 +216,14 @@ def _generate_final_answer(
     if not chunks:
         return Answer(text="根据现有资料无法回答。", confidence="low", citations=[])
     context_str, citations = build_context(chunks, paths_acc)
-    text = llm.chat(build_answer_messages(question, context_str))
+    text = llm.chat(
+        build_answer_messages(
+            question,
+            context_str,
+            history=history,
+            retrieval_question=retrieval_question,
+        )
+    )
     used = {int(n) for n in re.findall(r"\[(\d+)\]", text)}
     cited = [c for c in citations if c.index in used] if used else []
     confidence = "high" if len(used) >= 2 else ("medium" if used else "low")
@@ -230,21 +239,24 @@ def answer_question_agentic(
     rerank_top_n: int = 5,
     database: str = "neo4j",
     history: list[dict] | None = None,
+    retrieval_question: str | None = None,
     on_event: Callable[..., None] | None = None,
 ) -> Answer:
     """Agentic RAG 问答：ReAct 循环，LLM 自主决定检索策略，证据足够后生成带引用答案。
 
     history 为同会话近期对话（已规整为 {role,content} 列表），插入到 system 与当前
-    question 之间，让 Agent 理解追问上下文。history=None 时行为不变（保现有测试不回归）。
+    检索问题之间。retrieval_question 是上层只生成一次的独立检索问题；未传时仍使用
+    原始 question，保持单轮调用兼容。最终生成始终以 question 的原始语义为准。
     on_event 回调让循环每一步通知外部（run_chat 用它 emit RunEvent），本函数不依赖
     RunStore，保持纯检索逻辑、可单测。端点不支持 tool calling 时抛 ToolCallingUnsupported。
     """
     evidence_pool: dict[str, ChunkHit] = {}
     paths_acc: list[RelationPath] = []
+    planning_question = retrieval_question or question
     messages: list[dict] = [{"role": "system", "content": _AGENT_SYSTEM_PROMPT}]
     if history:
         messages.extend(history)  # 追问上下文：system 之后、当前问题之前
-    messages.append({"role": "user", "content": question})
+    messages.append({"role": "user", "content": planning_question})
 
 
     for turn in range(max_turns):
@@ -265,7 +277,13 @@ def answer_question_agentic(
             if on_event:
                 on_event(Stage.CHECKING, "评估证据充分性")
             return _generate_final_answer(
-                driver, question, evidence_pool, paths_acc, on_event=on_event
+                driver,
+                question,
+                evidence_pool,
+                paths_acc,
+                retrieval_question=retrieval_question,
+                history=history,
+                on_event=on_event,
             )
 
         # 遍历执行本轮所有 tool_calls（OpenAI 可并行返回多个，必须全执行全回传）
@@ -303,5 +321,11 @@ def answer_question_agentic(
     # 达 max_turns 硬上限，强制用已有证据生成兜底答案
     logger.info("agent 达 max_turns=%d，强制生成兜底答案", max_turns)
     return _generate_final_answer(
-        driver, question, evidence_pool, paths_acc, on_event=on_event
+        driver,
+        question,
+        evidence_pool,
+        paths_acc,
+        retrieval_question=retrieval_question,
+        history=history,
+        on_event=on_event,
     )
