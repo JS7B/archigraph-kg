@@ -336,8 +336,8 @@
 
 - [x] A `feat/audit-infrastructure`：登记四条业务分支的文件所有权与确定性门禁；主审补齐 Q 的既有 pipeline 回归目标后合并。
 - [x] P `feat/qa-memory-grounding`：追问指代改写为独立检索问题，最终生成同时获得原问题、历史、独立问题和本轮证据。
-- [ ] Q `feat/qa-citation-guard`：统一有效角标校验、正文净化和基于有效 Citation 的 confidence。
-- [ ] S `feat/conversation-atomic-turn`：以 Run 为幂等键，原子分配 turn_index 并一次提交 user/agent 消息。
+- [x] Q `feat/qa-citation-guard`：统一有效角标校验、正文净化和基于有效 Citation 的 confidence。
+- [x] S `feat/conversation-atomic-turn`：以 Run 为幂等键，原子分配 turn_index 并一次提交 user/agent 消息。
 - [ ] R `feat/qa-canonical-expand`：QA 关系扩展只读取 evidence_pool 内 Chunk 对应的 accepted-only canonical 关系。
 - [ ] F 主仓库终审：逐分支 diff/门禁、全量后端/评估/前端回归、隔离 Neo4j 生命周期、个人图谱只读指纹和本地多轮问答验收。
 
@@ -348,6 +348,8 @@
 Wave 0 验证：审计套件 34 passed；Q 修订点 1 passed；`git diff --check`、Python compileall 与干净 worktree 真实 gate 均通过，gate 返回 `{"continue": true}`。未连接真实 LLM/Neo4j，未修改业务代码。
 
 Wave 1 验证：主审与独立复核均无阻塞发现；memory grounding 13 passed，聚焦 QA 19 passed / 5 个真实服务用例 skipped，service-free runs 5 passed / 1 个 live Neo4j 用例 deselected；Python compileall、`git diff --check` 与干净 worktree 真实 gate 均通过。重写只在有历史时于既有限并发区执行一次，Agentic 与线性降级复用同一独立检索问题；无历史保持原单轮消息结构，失败回退原问题，历史不进入 Citation。
+
+Wave 2 验证：Q 经三轮主审补齐跨行/转义 code span、超长数字角标与缩进 Markdown 反例，finalizer + pipeline 23 passed；S 确定性门禁 atomic 6 passed、chat contract 2 passed、runs 7 passed / 1 个 live 用例 deselected。隔离 Neo4j 上 store 14 passed，8 个并发 Run 产生 8 对相邻且不重叠的索引，同 Run 重试未增加 16 条消息计数且未覆写，测试数据已清理；P/Q/S 集成 memory 13 passed，前端 `tsc --noEmit` 通过。两条业务分支与条件集成分支的干净 worktree gate 均返回 `{"continue": true}`，未触碰个人图库。
 
 ## Review
 
