@@ -334,7 +334,7 @@
 
 > 执行规格：`docs/superpowers/plans/2026-07-20-agentic-rag-correctness-hardening.md`。主仓库大脑统一评审、合并与最终验证；工人使用同级物理 worktree，仅在固定 `feat/*` 分支提交。
 
-- [ ] A `feat/audit-infrastructure`：登记四条业务分支的文件所有权与确定性门禁。
+- [x] A `feat/audit-infrastructure`：登记四条业务分支的文件所有权与确定性门禁；主审补齐 Q 的既有 pipeline 回归目标后合并。
 - [ ] P `feat/qa-memory-grounding`：追问指代改写为独立检索问题，最终生成同时获得原问题、历史、独立问题和本轮证据。
 - [ ] Q `feat/qa-citation-guard`：统一有效角标校验、正文净化和基于有效 Citation 的 confidence。
 - [ ] S `feat/conversation-atomic-turn`：以 Run 为幂等键，原子分配 turn_index 并一次提交 user/agent 消息。
@@ -344,6 +344,8 @@
 执行顺序：A → P →（Q 与 S 并行）→ R → F。若出现无法归属单分支的真实集成缺陷，才条件创建 `feat/qa-integration`，不预建空分支。
 
 验证目标：强指代追问稳定命中正确主题；无效角标不能进入返回答案或抬高置信度；review/坏证据关系不能进入 QA 图扩展；并发/重试/持久化失败均不能产生重复、覆盖或半轮消息；所有改造不新增依赖、不改变前端 API 契约、不写个人源图或规范图。
+
+Wave 0 验证：审计套件 34 passed；Q 修订点 1 passed；`git diff --check`、Python compileall 与干净 worktree 真实 gate 均通过，gate 返回 `{"continue": true}`。未连接真实 LLM/Neo4j，未修改业务代码。
 
 ## Review
 
