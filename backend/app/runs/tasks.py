@@ -32,6 +32,7 @@ from app.graph.embedding import embed_texts
 from app.parsing import parse_file
 from app.qa.agent import ToolCallingUnsupported, answer_question_agentic
 from app.qa.pipeline import answer_question
+from app.qa.question_rewrite import resolve_retrieval_question
 from app.runs.models import RunEvent, RunStatus, Stage
 from app.runs.store import RunStore
 
@@ -159,7 +160,7 @@ async def _run_chat_agentic(
 ):
     """跑 Agentic RAG + 多轮记忆；端点不支持 tool calling 时降级线性 pipeline。返回 Answer。
 
-    流程：读近期历史 → 注入 Agent → 调用 → 写回本轮 user/agent 两条消息。
+    流程：读近期历史 → 一次指代消歧 → 注入 Agent → 调用 → 写回本轮两条消息。
     会话读写是图谱阻塞调用，用 asyncio.to_thread 包裹；on_event 跨线程 emit 用
     call_soon_threadsafe 投递回事件循环线程。
     """
@@ -176,9 +177,21 @@ async def _run_chat_agentic(
     history = _to_history(recent)
 
     async with _LLM_SEMAPHORE:
+        # 重写只在整次 Run 的共享入口执行一次；Agentic 与降级链路复用同一个结果。
+        # 无历史传 None，保持既有单轮 planner/final prompt 完全不变。
+        retrieval_question = None
+        if history:
+            retrieval_question = await asyncio.to_thread(
+                resolve_retrieval_question, question, history
+            )
         try:
             answer = await asyncio.to_thread(
-                answer_question_agentic, driver, question, history=history, on_event=_emit_cb
+                answer_question_agentic,
+                driver,
+                question,
+                history=history,
+                retrieval_question=retrieval_question,
+                on_event=_emit_cb,
             )
         except ToolCallingUnsupported as exc:
             logger.warning("LLM 不支持 tool calling，降级线性 RAG：%s", exc)
@@ -186,7 +199,11 @@ async def _run_chat_agentic(
             _emit(store, run_id, Stage.CHECKING, message="组装上下文")
             _emit(store, run_id, Stage.WRITING, message="生成带引用回答")
             answer = await asyncio.to_thread(
-                answer_question, driver, question, history=history
+                answer_question,
+                driver,
+                question,
+                history=history,
+                retrieval_question=retrieval_question,
             )
 
     # 写回本轮两条消息（user + agent），各 embed 一次（问答都向量化，供后续召回）

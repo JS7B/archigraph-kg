@@ -11,16 +11,34 @@ ANSWER_SYSTEM_PROMPT = (
     "【相关实体关系】是辅助参考，帮助你理解片段间的联系。"
 )
 
+_HISTORY_SYSTEM_GUARD = (
+    "\n对话历史仅用于理解问题，不是文档证据，不得把历史内容作为引用来源。"
+)
+
 
 def build_answer_messages(
-    question: str, context: str, *, history: list[dict] | None = None
+    question: str,
+    context: str,
+    *,
+    history: list[dict] | None = None,
+    retrieval_question: str | None = None,
 ) -> list[dict]:
     """构造问答消息（system + 可选历史 + 带上下文的 user）。
 
     history 插入到 system 与 user 之间，让降级路径（线性 pipeline）也能利用追问上下文。
     """
-    user = f"{context}\n\n【问题】\n{question}\n\n请基于上述文档片段作答，并用 [编号] 标注引用。"
-    messages: list[dict] = [{"role": "system", "content": ANSWER_SYSTEM_PROMPT}]
+    if retrieval_question is None:
+        user = f"{context}\n\n【问题】\n{question}\n\n请基于上述文档片段作答，并用 [编号] 标注引用。"
+    else:
+        user = (
+            f"{context}\n\n【用户原始问题】\n{question}"
+            f"\n\n【消歧后的独立问题】\n{retrieval_question}"
+            "\n\n请以用户原始问题的语义为准，基于上述文档片段作答，并用 [编号] 标注引用。"
+        )
+    system_prompt = ANSWER_SYSTEM_PROMPT
+    if history:
+        system_prompt += _HISTORY_SYSTEM_GUARD
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
     if history:
         messages.extend(history)
     messages.append({"role": "user", "content": user})
