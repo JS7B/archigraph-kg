@@ -1,95 +1,134 @@
-# Archigraph（档图） · archigraph-kg
+# Archigraph（档图）
 
-面向个人文档集合（技术论文 / GitHub 仓库文档 / 产品需求文档）的端到端 **Agentic GraphRAG** 系统：自动完成文档解析、实体与关系抽取、Neo4j 知识图谱构建，再由一个 **ReAct 检索-反思 Agent**（LLM 自主决定检索什么、证据够不够、要不要换查询再查）生成**可追溯引用**的回答，**多轮对话记忆**让 Agent 记住同一会话的上下文（历史存图谱、可恢复），并配套一个清晰专业、带像素 Agent 房间动效的前端工作台。
+Archigraph 是一个面向个人文档的本地优先 **Agentic GraphRAG** 系统。它将 Markdown、文本和 PDF 解析为可追溯的知识图谱，并通过 ReAct Agent 组合向量检索、规范实体关系扩展和多轮对话记忆，生成带原文引用的回答。
 
-> 展示名 **Archigraph** = archive（档案）+ graph（图谱），呼应招牌组件「像素档案员 AgentRoom」。
-> 状态：核心链路全部完成且端到端验证通过（解析 → 图谱 → 抽取 → Agentic RAG 问答 → 多轮对话记忆 → Run/SSE → 前端工作台 → 评估），并经一轮 PR 审计整改（安全/可复现/正确性/无障碍加固）与一轮体验升级（回答渲染 / 图谱降噪 / AgentRoom 行为状态机）。最新一轮 4 样本评估中，实体召回率已提升到 **87.7%**（标注加权池化）/ **86.6%**（宏平均），其余硬指标继续达标。
+项目适合整理技术论文、仓库文档和产品资料，也可作为 FastAPI、Neo4j、Agentic RAG 与 React 全栈实践参考。
 
-> 2026-07 图谱质量重构 Wave 1–3 已合并：解析层按内容类型决定抽取策略；抽取结果必须携带 chunk evidence 并经过候选、关系端点和置信度门禁；跨文档实体采用 exact/alias 优先、模糊匹配仅进入 review；图谱前端默认读取查询时生成的规范实体投影，按确定性主题社区和有界局部图展示聚合证据。当前主分支的单元回归、独立 Neo4j 生命周期、个人图谱只读指纹、评估、前端构建和 Hook 审计均已通过。
+## 核心能力
+
+- **文档入库**：解析 Markdown、txt 和文本型 PDF，保留页码、标题路径和字符偏移。
+- **知识图谱**：抽取实体与关系，保存 chunk 级证据，并通过 `CanonicalEntity` 处理跨文档实体归一。
+- **Agentic RAG**：自研 ReAct 循环使用 `vector_search` 和 `expand_entity` 工具，自主检索、反思和补充证据。
+- **可靠引用**：答案角标必须对应真实 Citation；无有效证据时安全拒答，不把无效角标计入置信度。
+- **多轮记忆**：历史消息持久化到 Neo4j，追问会先消解指代，再复用同一个独立检索问题。
+- **图谱探索**：前端展示 accepted-only 规范图投影、主题社区、有界局部图和来源证据。
+- **实时反馈**：RunEvent 通过 SSE 驱动进度时间线和像素 Agent 房间，前端不伪造运行状态。
+
+## 工作方式
+
+```mermaid
+flowchart LR
+    D["个人文档"] --> P["解析与切块"]
+    P --> X["实体/关系抽取与校验"]
+    X --> N["Neo4j 源图 + 规范实体覆盖层"]
+    Q["用户问题 + 会话历史"] --> A["ReAct Agent"]
+    A --> V["向量检索"]
+    A --> G["accepted-only 图关系扩展"]
+    V --> E["证据池"]
+    G --> E
+    N --> V
+    N --> G
+    E --> F["引用终审后的回答"]
+```
+
+源 `Entity / RELATES` 保留文档级事实；跨文档身份通过 `RESOLVES_TO → CanonicalEntity` 表达。图谱视图和 QA 关系扩展在查询时投影 accepted 关系，不额外维护一套容易过期的规范关系。
 
 ## 技术栈
 
-- **后端**：Python 3.11+ · FastAPI · Pydantic
-- **图谱 / 检索**：Neo4j + Vector Index（Docker 本地部署）
-- **LLM**：OpenAI-compatible chat & embedding（不绑定具体厂商）
-- **Agent**：自研 ReAct 循环 + OpenAI 原生 function calling（不引 LangGraph/LangChain）
-- **文档解析**：PyMuPDF（PDF）· Markdown / txt
-- **前端**：React 19 + Vite + TypeScript · Cytoscape.js（图谱可视化）
-
-## 环境要求
-
-- Python 3.11+
-- Node.js 18+
-- Docker Desktop（用于本地 Neo4j）
+| 层             | 技术                                        |
+| -------------- | ------------------------------------------- |
+| 后端           | Python · FastAPI · Pydantic               |
+| 图谱与向量检索 | Neo4j 5 + Vector Index · Docker Compose    |
+| LLM            | OpenAI-compatible chat / embedding / rerank |
+| Agent          | 自研 ReAct 循环 + function calling          |
+| 文档解析       | PyMuPDF · Markdown / txt                   |
+| 前端           | React · Vite · TypeScript · Cytoscape.js |
 
 ## 快速开始
 
+环境要求：Python 3.11+、Node.js `^20.19.0 || >=22.12.0`、Docker Desktop，以及可用的 OpenAI-compatible 模型服务。
+
+### 1. 配置环境变量
+
 ```bash
-# 1. 配置环境变量
 cp .env.example .env
-# 编辑 .env，填入 LLM 配置与 Neo4j 密码
+```
 
-# 2. 启动 Neo4j
+至少配置：
+
+- `OPENAI_BASE_URL`、`OPENAI_API_KEY`
+- `CHAT_MODEL`、`EMBEDDING_MODEL`、`EMBEDDING_DIM`
+- `NEO4J_PASSWORD`
+
+Chat 模型需要支持 JSON 输出；支持 function calling 时使用 Agentic RAG，不支持时问答会降级到线性 RAG。
+
+### 2. 启动 Neo4j
+
+```bash
 docker compose up -d neo4j
-
-# 3. 验证：浏览器打开 http://localhost:7474
-#    用 neo4j / <你在 .env 设的 NEO4J_PASSWORD> 登录
 ```
 
-后端、前端启动详见 [`运行说明.md`](运行说明.md)。
+- Neo4j Browser：http://localhost:7474
+- 本地数据目录：`./neo4j/data`
 
-### 后端 API（已就绪）
+### 3. 启动后端
 
 ```bash
-conda activate myself     # 激活 Python 环境（如用 conda）
 cd backend
+python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
-# API: http://localhost:8000，交互文档 /docs，健康检查 /health、/health/deps
 ```
 
-核心端点：文档上传入库 `POST /api/documents`、问答 `POST /api/chat`（异步 Agentic RAG + SSE 进度流 `/api/runs/{runId}/events/stream`，多轮检索时前端像素房间跟着 Agent 决策实时走）、规范社区 `GET /api/graph/canonical/communities`、规范局部图 `GET /api/graph/canonical/entities/{id}/subgraph`、规范搜索 `GET /api/graph/canonical/search`、**会话管理** `GET/POST /api/conversations`（多轮对话记忆：历史存 Neo4j、问答向量化、刷新可恢复）。原 `/api/graph/entities`、`/communities` 等源图接口继续保留，用于兼容和诊断。
+- API：http://localhost:8000
+- OpenAPI：http://localhost:8000/docs
+- 依赖检查：http://localhost:8000/health/deps
 
-> 安全：若在 `.env` 配置了 `API_KEY`，所有非 `/health` 接口需在请求头带 `X-API-Key`；为空（默认）则不鉴权，便于本地开发。
-
-## 评估
-
-系统有一套可复现的评估，量化解析成功率、实体召回率、关系可用率、引用命中率、幻觉率五项指标。详见 [`docs/evaluation.md`](docs/evaluation.md)。
+### 4. 启动前端
 
 ```bash
-# 前置：Neo4j 容器在跑 + .env 配好 LLM
-cd backend
-python ../evals/run_eval.py
-# 产出 evals/report.md（指标实测值 + 逐篇明细 + 待复核清单）
+cd frontend
+npm install
+npm run dev
 ```
 
-当前质量快照：
+工作台：http://localhost:5173
 
-- 解析成功率 `100%`
-- 实体召回率 `87.7%`（标注加权池化）/ `86.6%`（宏平均），4 篇样本最低 `78.6%`
-- 关系可用率 `100%`
-- 引用命中率 `100%`
-- 明显幻觉率当前统计受 Markdown 分句器口径影响，仍有一项评估文档同步待补
+## 核心 API
 
-## 当前状态
+| 接口                                                | 用途                                              |
+| --------------------------------------------------- | ------------------------------------------------- |
+| `POST /api/documents`                             | 上传文档并启动异步入库                            |
+| `GET /api/documents`                              | 查询文档列表                                      |
+| `POST /api/chat`                                  | 创建问答 Run，返回`runId` 和 `conversationId` |
+| `GET /api/runs/{id}/events/stream`                | 订阅 RunEvent SSE 流                              |
+| `GET /api/chunks/{id}`                            | 根据 Citation 回查原始 chunk                      |
+| `GET /api/graph/canonical/communities`            | 查询规范实体主题社区                              |
+| `GET /api/graph/canonical/entities/{id}/subgraph` | 查询有界规范局部图                                |
+| `GET /api/graph/canonical/search`                 | 搜索规范实体及 accepted alias                     |
+| `GET/POST /api/conversations`                     | 管理多轮会话                                      |
 
-- 已完成：文档入库、Neo4j 图谱、Agentic RAG、多轮对话记忆、Run/SSE、前端三视图、AgentRoom、评估体系
-- 已加固：鉴权中间件、CORS、向量索引维度兜底、并发限流、无障碍与 reduced-motion
-- 未完成：公开展示与简历材料（架构图、演示脚本、GIF/视频、简历 bullet）
-- 部署前已知约束：若后端启用 `API_KEY`，浏览器原生 `EventSource` 无法为 SSE 携带 `X-API-Key`，需改 query/cookie/fetch-stream 方案
+若 `.env` 中设置了 `API_KEY`，非健康检查接口需要 `X-API-Key`。浏览器原生 `EventSource` 不能携带自定义请求头，因此启用 API Key 的部署需要为 SSE 改用 cookie、查询令牌或 fetch-stream 方案。
 
 ## 目录结构
 
-```
-backend/    后端 FastAPI 应用（Agentic RAG / 图谱 / 抽取 / Run·SSE / 多轮对话记忆）
-frontend/   React + Vite + TS 前端工作台（三视图 + 会话侧边栏 + 像素 Agent 房间）
-docs/       规划与设计文档
-samples/    公开样本文档（私有样本放 samples/private/，不提交）
-evals/      评估集与脚本（ground_truth + run_eval.py）
+```text
+backend/    FastAPI、文档解析、图谱写入、实体归一、Agentic RAG、会话与 Run
+frontend/   React 工作台、文档库、图谱探索、会话侧边栏和 AgentRoom
+evals/      评估标注、脚本和报告
+samples/    可公开的样本文档
+docs/       架构、评估、工作流和开发记录
+neo4j/      本地 Neo4j 数据和日志（不提交）
 ```
 
-## 文档
+## 质量验证
 
-- [`项目说明.md`](项目说明.md)：项目总说明（架构、图谱模型、入库/问答链路、对话记忆、事件流、评估、设计取舍）
-- [`运行说明.md`](运行说明.md)：本地启动完整步骤 + 常见问题
-- [`docs/personal-kg-graphrag-agent-plan.md`](docs/personal-kg-graphrag-agent-plan.md)：总规划（定位、概念模型、图谱设计、流程、API、评估）
-- [`backend/后端说明.md`](backend/后端说明.md) · [`frontend/前端说明.md`](frontend/前端说明.md)：前后端工程实现详解
+项目包含后端单元/集成测试、前端 lint/typecheck/Vitest/build、隔离 Neo4j 生命周期测试，以及解析、实体召回、关系可用性、引用命中和幻觉检查等可复现评估。
+
+评估定义与运行方式见 [docs/evaluation.md](docs/evaluation.md)。
+
+## 文档导航
+
+- [项目说明.md](项目说明.md)：架构、数据模型、核心链路和设计取舍
+- [backend/后端说明.md](backend/后端说明.md)：后端模块与实现细节
+- [frontend/前端说明.md](frontend/前端说明.md)：前端数据流、组件和 AgentRoom
+- [docs/evaluation.md](docs/evaluation.md)：评估指标与复现方式

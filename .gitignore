@@ -42,6 +42,12 @@ uploads/
 Thumbs.db
 .superpowers/
 .claude/
+.agents/
+.codex/
+
+# local research and cross-project workflow notes
+/Agent工程实践调研.md
+/docs/wave-work-package-subagent-workflow.md
 
 # subagent-driven-development working-tree reports
 /sdd/
